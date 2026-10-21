@@ -26,6 +26,8 @@ choice
         bool "Raspberry Pi RP2040/RP235x"
     config MACH_PRU
         bool "Beaglebone PRU"
+    config MACH_UPC
+        bool "Marvell 88PA6170 UPC (Sindoh DP200)"
     config MACH_AR100
         bool "Allwinner A64 AR100"
     config MACH_LINUX
@@ -43,6 +45,7 @@ source "src/hc32f460/Kconfig"
 source "src/rp2040/Kconfig"
 source "src/pru/Kconfig"
 source "src/ar100/Kconfig"
+source "src/upc/Kconfig"
 source "src/linux/Kconfig"
 source "src/simulator/Kconfig"
 
