@@ -49,6 +49,7 @@ struct stepper {
     struct trsync_signal stop_signal;
 #if CONFIG_UPC_STEP_BATCH
     uint32_t burst, burst_c0;   // steps of the running engine move, its counter
+    uint8_t burst_idle;         // the last steps were an engine move (it is idle)
 #endif
     // gcc (pre v6) does better optimization when uint8_t are bitfields
     uint8_t flags : 8;
@@ -83,9 +84,15 @@ stepper_burst_check(struct stepper *s, uint32_t interval, int_fast16_t add
         || (interval >> 2) < CONFIG_UPC_STEP_HALF_TICKS)
         return;
     uint32_t start = s->next_step_time - interval / 2;
-    if (was_active && timer_is_before(start, min_next_time + BURST_GAP))
-        // the previous step's pulse may still run: step this block
-        return;
+    // After a one-step pulse wait until it has surely ended; after an
+    // engine move (finished: checked) start at once, if at most
+    // CONFIG_UPC_STEP_BATCH_ERR ticks late
+    uint32_t limit = min_next_time + (s->burst_idle ? 0 : BURST_GAP);
+    if (was_active && timer_is_before(start, limit)) {
+        if (!s->burst_idle || limit - start > CONFIG_UPC_STEP_BATCH_ERR)
+            return;                             // step this block
+        start = limit;
+    }
     s->flags |= SF_BURST_NEXT;
     s->time.waketime = start;
 }
@@ -130,7 +137,8 @@ stepper_event_burst(struct stepper *s)
     }
     gpio_step_burst_end(s->step_pin);
     s->count = 1;                               // as after a stepped block
-    s->time.waketime = timer_read_time() + s->step_pulse_ticks;
+    s->burst_idle = 1;
+    s->time.waketime = timer_read_time();
     return stepper_load_next(s);
 }
 #endif
@@ -267,6 +275,7 @@ stepper_event_full(struct timer *t)
 #if CONFIG_UPC_STEP_BATCH
     if (s->flags & SF_BURST_NEXT || s->burst)
         return stepper_event_burst(s);
+    s->burst_idle = 0;
 #endif
     gpio_out_toggle_noirq(s->step_pin);
     uint32_t curtime = timer_read_time();
