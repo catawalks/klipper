@@ -86,10 +86,10 @@ stepper_burst_check(struct stepper *s, uint32_t interval, int_fast16_t add
     uint32_t start = s->next_step_time - interval / 2;
     // After a one-step pulse wait until it has surely ended; after an
     // engine move (finished: checked) start at once, if at most
-    // CONFIG_UPC_STEP_BATCH_ERR ticks late
+    // CONFIG_UPC_STEP_BATCH_LATE ticks late (a stepped step is ~840 late)
     uint32_t limit = min_next_time + (s->burst_idle ? 0 : BURST_GAP);
     if (was_active && timer_is_before(start, limit)) {
-        if (!s->burst_idle || limit - start > CONFIG_UPC_STEP_BATCH_ERR)
+        if (!s->burst_idle || limit - start > CONFIG_UPC_STEP_BATCH_LATE)
             return;                             // step this block
         start = limit;
     }
