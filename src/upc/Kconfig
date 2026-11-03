@@ -72,6 +72,31 @@ config UPC_STEP_SINGLE
       every STEP pin toggle starts one engine pulse. The host's step
       timing is unchanged. Halves the step interrupts.
 
+config UPC_STEP_BATCH
+    bool "Run constant-rate step blocks as multi-step engine moves"
+    depends on UPC_CORE_FM
+    select UPC_STEP_SINGLE
+    default n
+    help
+      A queue_step block with add == 0 is handed to the stepper engine
+      as one move (its rising edges on the scheduled step times) instead
+      of one timer event per step. Positions mid-move and after a homing
+      stop come from the engine's edge counter (+0x78).
+
+config UPC_STEP_BATCH_MIN
+    int "Fewest steps in a block for an engine move"
+    depends on UPC_STEP_BATCH
+    default 8
+
+config UPC_STEP_BATCH_ERR
+    int "Most timer ticks an engine move's last step may come early"
+    depends on UPC_STEP_BATCH
+    default 400
+    help
+      The engine's edge period is the step interval / 4 (engine ticks);
+      the remainder makes each step up to 3 timer ticks early. Longer
+      blocks are split so this stays below the limit (400 = 1 us).
+
 config UPC_ADC_SETTLE_US
     int "Wait after selecting an ADC input before reading (microseconds)"
     depends on UPC_CORE_IO
