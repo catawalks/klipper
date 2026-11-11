@@ -107,7 +107,11 @@ stepper_event_burst(struct stepper *s)
         // the block's last step is left out (stepped below)
         uint32_t steps = s->count - 1;
         if (interval & 3) {
-            uint32_t m = CONFIG_UPC_STEP_BATCH_ERR / (interval & 3);
+            // CONFIG_UPC_STEP_BATCH_ERR / (interval & 3) without a divide
+            static const uint16_t max_steps[4] = {
+                0, CONFIG_UPC_STEP_BATCH_ERR, CONFIG_UPC_STEP_BATCH_ERR / 2,
+                CONFIG_UPC_STEP_BATCH_ERR / 3 };
+            uint32_t m = max_steps[interval & 3];
             if (steps > m)
                 steps = m;
         }
@@ -275,8 +279,20 @@ stepper_event_full(struct timer *t)
     if (s->flags & SF_BURST_NEXT || s->burst)
         return stepper_event_burst(s);
 #endif
+#if CONFIG_UPC_STEP_SINGLE
+    // UPC: one engine pulse per event. The engine times the pulse and
+    // smot_pulse() waits for a running one, so within a block the earliest
+    // next step is taken from this event's scheduled time instead of a
+    // timer read. A block's last step reads the timer as before (the next
+    // block's direction change and engine-move start depend on it).
+    gpio_step_pulse(s->step_pin);
+    uint32_t curtime = s->time.waketime;
+    if (unlikely(s->count == 1))
+        curtime = timer_read_time();
+#else
     gpio_out_toggle_noirq(s->step_pin);
     uint32_t curtime = timer_read_time();
+#endif
     uint32_t min_next_time = curtime + s->step_pulse_ticks;
     uint32_t count = s->count - 1;
     if (likely(count & 1 && !(s->flags & SF_SINGLE_SCHED)))

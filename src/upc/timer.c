@@ -17,6 +17,7 @@
 // to advance past one Timer1 period.
 
 #include "autoconf.h" // CONFIG_UPC_TIMER_ADDR
+#include "compiler.h" // noinline
 #include "board/misc.h" // timer_read_time
 #include "internal.h" // reg_read
 #include "sched.h" // DECL_INIT
@@ -66,11 +67,42 @@ shared_time(void)
 // Return the current time (in absolute clock ticks). Klipper assumes the
 // clock starts near zero at boot (sched.c's periodic_timer starts at 0 and
 // advances 100 ms per run), so each core counts from its own boot.
+#if CONFIG_UPC_CORE_FM
+// The FM core is the only writer of the shared accumulator, so it keeps
+// timer_acc + TIMER_RELOAD - timer_boot_offset in a local: reading the time
+// is then one register read and a subtraction (it is read several times per
+// step). The reload stays in shared_time().
+static uint32_t timer_base;
+
+static void
+timer_base_update(void)
+{
+    timer_base = UPC_SHARED->timer_acc + TIMER_RELOAD - timer_boot_offset;
+}
+
+static noinline uint32_t
+timer_read_reload(void)
+{
+    uint32_t t = shared_time() - timer_boot_offset;
+    timer_base_update();
+    return t;
+}
+
+uint32_t
+timer_read_time(void)
+{
+    uint32_t raw = reg_read(CONFIG_UPC_TIMER_ADDR);
+    if (unlikely(raw < TIMER_RELOAD_BELOW))
+        return timer_read_reload();
+    return timer_base - raw;
+}
+#else
 uint32_t
 timer_read_time(void)
 {
     return shared_time() - timer_boot_offset;
 }
+#endif
 
 // Called from upc_main() before any Klipper code runs (and again after a
 // "reset" command, which restarts at the reset vector).
@@ -78,12 +110,20 @@ void
 timer_boot(void)
 {
     timer_boot_offset = shared_time();
+#if CONFIG_UPC_CORE_FM
+    timer_base_update();
+#endif
 }
 
+// True if the timer is due; *now is then the time read for the check (no
+// timer read at all while no timer is armed)
 uint8_t
-timer_pending(void)
+timer_pending(uint32_t *now)
 {
-    return timer_armed && !timer_is_before(timer_read_time(), timer_compare);
+    if (!timer_armed)
+        return 0;
+    *now = timer_read_time();
+    return !timer_is_before(*now, timer_compare);
 }
 
 void

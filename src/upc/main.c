@@ -223,9 +223,9 @@ uint32_t upc_sleep_busy;
 void
 irq_poll(void)
 {
-    if (timer_pending()) {
+    uint32_t t0;
+    if (timer_pending(&t0)) {
         timer_clear_pending();
-        uint32_t t0 = timer_read_time();
         uint32_t next = timer_dispatch_many_polling();
         timer_set(next);
         upc_sleep_busy += timer_read_time() - t0;

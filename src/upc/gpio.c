@@ -196,6 +196,17 @@ smot_pulse(uint8_t n)
     reg_write(b + SMOT_START, 1);
 }
 
+#if CONFIG_UPC_STEP_SINGLE
+// A step from src/stepper.c's timer event: the pin is known to be a step
+// pin and every call is one pulse, so gpio_out_toggle_noirq()'s pin
+// decoding and level tracking are left out (step_level stays at idle).
+void
+gpio_step_pulse(struct gpio_out g)
+{
+    smot_pulse(g.pin - PIN_STEP_BASE);
+}
+#endif
+
 #if CONFIG_UPC_STEP_BATCH
 // Multi-step engine moves for src/stepper.c (CONFIG_UPC_STEP_BATCH):
 // 'steps' steps at 'half' engine ticks per edge, so a step's rising edge
