@@ -112,4 +112,13 @@ config UPC_ADC_SETTLE_US
     depends on UPC_CORE_IO
     default 10000
 
+config UPC_ADC_HOLD_US
+    int "Time an ADC input keeps the mux after a sample (microseconds)"
+    depends on UPC_CORE_IO
+    default 3000
+    help
+      Must be longer than the time between a sensor's samples (klippy:
+      1 ms), so that another sensor waits for the end of a sample run
+      instead of switching the mux, and its settle time, after every sample.
+
 endif
