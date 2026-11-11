@@ -13,6 +13,13 @@ else
 CFLAGS += -marm
 endif
 
+# Step path in ARM mode (CONFIG_UPC_STEP_ARM); the rest stays Thumb
+ifeq ($(CONFIG_UPC_STEP_ARM),y)
+UPC_ARM_OBJS = $(OUT)src/stepper.o $(OUT)src/generic/timer_irq.o \
+    $(OUT)src/upc/main.o $(OUT)src/upc/timer.o $(OUT)src/upc/gpio.o
+$(UPC_ARM_OBJS): CFLAGS += -marm
+endif
+
 CFLAGS_klipper.elf += -nostdlib -nostartfiles -static
 CFLAGS_klipper.elf += -T $(OUT)src/upc/upc.ld -Wl,--gc-sections -lgcc
 $(OUT)klipper.elf: $(OUT)src/upc/upc.ld

@@ -97,6 +97,16 @@ config UPC_STEP_BATCH_ERR
       the remainder makes each step up to 3 timer ticks early. Longer
       blocks are split so this stays below the limit (400 = 1 us).
 
+config UPC_STEP_ARM
+    bool "Compile the step path in ARM mode (faster, about 1.6 KiB larger)"
+    depends on UPC_CORE_FM && UPC_THUMB
+    default n
+    help
+      stepper.c, the timer dispatch and the UPC timer/gpio/main code are
+      built with -marm instead of -mthumb: a stepped step takes about 17 %
+      fewer instructions (emulator: 129 -> 107). FM image 14068 instead
+      of 12492 bytes of the 16384. Not run on the printer yet.
+
 config UPC_ADC_SETTLE_US
     int "Wait after selecting an ADC input before reading (microseconds)"
     depends on UPC_CORE_IO
