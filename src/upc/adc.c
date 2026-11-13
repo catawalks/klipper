@@ -22,7 +22,7 @@ DECL_CONSTANT("ADC_MAX", ADC_RAW_MAX);
 
 enum { ADC_IDLE, ADC_SETTLING, ADC_SETTLED };
 static uint8_t adc_inited, adc_state, adc_cur_sel = 0xff;
-static uint32_t adc_ready_time;
+static uint32_t adc_ready_time, adc_last_use;
 
 static void
 adc_hw_init(void)
@@ -70,22 +70,33 @@ gpio_adc_setup(uint8_t pin)
 // same input are read back-to-back from the FIFO. Klipper samples one
 // sensor sample_count times in a row, so each report needs only one
 // settle per sensor.
+//
+// The selected input keeps the mux while it is being sampled: another
+// input gets it only CONFIG_UPC_ADC_HOLD_US after the last sample. Without
+// that, two sensors whose sample runs overlap (klippy starts them 10 ms
+// apart) took the mux from each other after every sample, so each sample
+// cost a settle period: 16 x 10 ms per 300 ms report for two sensors, and
+// "Rescheduled timer in the past" once a run is longer than the report
+// interval.
 uint32_t
 gpio_adc_sample(struct gpio_adc g)
 {
     uint32_t now = timer_read_time();
     if (adc_cur_sel == g.sel) {
-        if (adc_state == ADC_SETTLED)
-            return 0;
         if (adc_state == ADC_SETTLING) {
             int32_t diff = adc_ready_time - now;
             if (diff > 0)
                 return diff;
             adc_state = ADC_SETTLED;
+        }
+        if (adc_state == ADC_SETTLED) {
+            adc_last_use = now;
             return 0;
         }
-    } else if (adc_state == ADC_SETTLING) {
-        // Another input is settling - try again shortly
+    } else if (adc_state == ADC_SETTLING
+               || (adc_state == ADC_SETTLED
+                   && now - adc_last_use < timer_from_us(CONFIG_UPC_ADC_HOLD_US))) {
+        // Another input is settling or being sampled - try again shortly
         return timer_from_us(500);
     }
     adc_select(g.sel);
