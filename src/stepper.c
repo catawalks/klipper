@@ -47,6 +47,9 @@ struct stepper {
     uint32_t position;
     struct move_queue_head mq;
     struct trsync_signal stop_signal;
+#if CONFIG_UPC_STEP_BATCH
+    uint32_t burst, burst_c0;   // steps of the running engine move, its counter
+#endif
     // gcc (pre v6) does better optimization when uint8_t are bitfields
     uint8_t flags : 8;
 };
@@ -55,8 +58,89 @@ enum { POSITION_BIAS=0x40000000 };
 
 enum {
     SF_LAST_DIR=1<<0, SF_NEXT_DIR=1<<1, SF_INVERT_STEP=1<<2, SF_NEED_RESET=1<<3,
-    SF_SINGLE_SCHED=1<<4, SF_OPTIMIZED_PATH=1<<5, SF_HAVE_ADD=1<<6
+    SF_SINGLE_SCHED=1<<4, SF_OPTIMIZED_PATH=1<<5, SF_HAVE_ADD=1<<6,
+    SF_BURST_NEXT=1<<7
 };
+
+#if CONFIG_UPC_STEP_BATCH
+// UPC: a constant-rate block (add == 0) runs as one multi-step move of the
+// hardware stepper engine instead of one timer event per step. The engine
+// clock is half the timer's (2026-11-03), so 'interval' timer ticks are
+// interval / 4 engine ticks per edge and a step's rising edge comes half
+// an interval after the engine starts: the move is started that much
+// before the first step. When interval isn't a multiple of 4 each step
+// comes (interval & 3) ticks early; a block is split so that this stays
+// below CONFIG_UPC_STEP_BATCH_ERR ticks, and each part starts on time.
+// Positions mid-move and after a stop come from the engine's edge counter.
+// A block's last step is not part of the engine move but stepped on its
+// own: after an engine move's last rising edge the line stays high for half
+// an interval, which on a slow block (e.g. a first-layer extruder at ~2 ms
+// per step) holds up the next block past the 1 ms "Stepper too far in past"
+// limit (2026-11-05, work printer).
+#define BURST_MAX 32767         // CMD holds 2 * steps in 16 bits
+#define BURST_GAP (4 * CONFIG_UPC_STEP_HALF_TICKS)  // a one-step pulse
+
+static void
+stepper_burst_check(struct stepper *s, uint32_t interval, int_fast16_t add
+                    , uint_fast8_t was_active, uint32_t min_next_time)
+{
+    if (add || s->count < CONFIG_UPC_STEP_BATCH_MIN
+        || (interval >> 2) < CONFIG_UPC_STEP_HALF_TICKS)
+        return;
+    uint32_t start = s->next_step_time - interval / 2;
+    if (was_active && timer_is_before(start, min_next_time + BURST_GAP))
+        // the previous step's pulse may still run: step this block
+        return;
+    s->flags |= SF_BURST_NEXT;
+    s->time.waketime = start;
+}
+
+static uint_fast8_t stepper_load_next(struct stepper *s);
+
+// Timer event of a stepper in engine-move mode
+static uint_fast8_t
+stepper_event_burst(struct stepper *s)
+{
+    uint32_t interval = s->interval;            // add == 0
+    if (s->flags & SF_BURST_NEXT) {
+        // Start the engine: the part's first step is at s->next_step_time;
+        // the block's last step is left out (stepped below)
+        uint32_t steps = s->count - 1;
+        if (interval & 3) {
+            uint32_t m = CONFIG_UPC_STEP_BATCH_ERR / (interval & 3);
+            if (steps > m)
+                steps = m;
+        }
+        if (steps > BURST_MAX)
+            steps = BURST_MAX;
+        s->flags &= ~SF_BURST_NEXT;
+        s->burst = steps;
+        s->burst_c0 = gpio_step_burst(s->step_pin, steps, interval >> 2);
+        s->next_step_time += (steps - 1) * interval;  // its last step
+        s->time.waketime = s->next_step_time + interval / 2;
+        return SF_RESCHEDULE;
+    }
+    // The part should be over: wait for the engine (its clock may lag)
+    if (gpio_step_burst_busy(s->step_pin)) {
+        s->time.waketime = timer_read_time() + timer_from_us(1);
+        return SF_RESCHEDULE;
+    }
+    s->count -= s->burst;
+    s->burst = 0;
+    s->next_step_time += interval;
+    if (s->count > 1) {
+        // more of this block: the next part one interval after the last step
+        s->time.waketime = s->next_step_time - interval / 2;
+        s->flags |= SF_BURST_NEXT;
+        return SF_RESCHEDULE;
+    }
+    // Only the block's last step is left: a normal step at its time (the
+    // engine is idle by then), then the next block loads as usual
+    gpio_step_burst_end(s->step_pin);
+    s->time.waketime = s->next_step_time;
+    return SF_RESCHEDULE;
+}
+#endif
 
 // Setup a stepper for the next move in its queue
 static uint_fast8_t
@@ -118,8 +202,15 @@ stepper_load_next(struct stepper *s)
             min_next_time = curtime + s->step_pulse_ticks;
             if (timer_is_before(s->time.waketime, min_next_time))
                 s->time.waketime = min_next_time;
+#if CONFIG_UPC_STEP_BATCH
+            stepper_burst_check(s, move_interval, move_add, 1, min_next_time);
+#endif
             return SF_RESCHEDULE;
         }
+#if CONFIG_UPC_STEP_BATCH
+        stepper_burst_check(s, move_interval, move_add, was_active
+                            , min_next_time);
+#endif
     }
 
     // Set new direction (if needed)
@@ -180,6 +271,10 @@ static uint_fast8_t
 stepper_event_full(struct timer *t)
 {
     struct stepper *s = container_of(t, struct stepper, time);
+#if CONFIG_UPC_STEP_BATCH
+    if (s->flags & SF_BURST_NEXT || s->burst)
+        return stepper_event_burst(s);
+#endif
     gpio_out_toggle_noirq(s->step_pin);
     uint32_t curtime = timer_read_time();
     uint32_t min_next_time = curtime + s->step_pulse_ticks;
@@ -328,6 +423,11 @@ stepper_get_position(struct stepper *s)
 {
     uint32_t position = s->position;
     // If stepper is mid-move, subtract out steps not yet taken
+#if CONFIG_UPC_STEP_BATCH
+    if (s->burst)
+        position -= s->count - gpio_step_burst_done(s->step_pin, s->burst_c0);
+    else
+#endif
     if (s->flags & SF_SINGLE_SCHED)
         position -= s->count;
     else
@@ -357,6 +457,13 @@ stepper_stop(struct trsync_signal *tss, uint8_t reason)
 {
     struct stepper *s = container_of(tss, struct stepper, stop_signal);
     sched_del_timer(&s->time);
+#if CONFIG_UPC_STEP_BATCH
+    if (s->burst) {
+        // stop the engine; its steps made count as taken
+        s->count -= gpio_step_burst_stop(s->step_pin, s->burst_c0);
+        s->burst = 0;
+    }
+#endif
     s->next_step_time = s->time.waketime = 0;
     s->position = -stepper_get_position(s);
     s->count = 0;
