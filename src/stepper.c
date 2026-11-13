@@ -225,6 +225,12 @@ command_config_stepper(uint32_t *args)
         s->flags = SF_INVERT_STEP;
     else if (invert_step < 0)
         s->flags = SF_SINGLE_SCHED;
+#if CONFIG_UPC_STEP_SINGLE
+    // UPC: the stepper engine makes the whole pulse, so an unstep event
+    // would do nothing - one event per step (src/upc/gpio.c pulses on
+    // every toggle). The host's step times are the same.
+    s->flags |= SF_SINGLE_SCHED;
+#endif
     s->step_pin = gpio_out_setup(args[1], s->flags & SF_INVERT_STEP);
     s->dir_pin = gpio_out_setup(args[2], 0);
     s->position = -POSITION_BIAS;
