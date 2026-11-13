@@ -300,8 +300,13 @@ gpio_out_toggle_noirq(struct gpio_out g)
         uint8_t n = pin - PIN_STEP_BASE;
         uint8_t val = step_level[n] ^ 1;
         step_level[n] = val;
+#if CONFIG_UPC_STEP_SINGLE
+        // one toggle per step: src/stepper.c runs these single-scheduled
+        smot_pulse(n);
+#else
         if (val != step_idle[n])
             smot_pulse(n);
+#endif
     } else if (pin_in(pin, PIN_DIR_BASE, SMOT_COUNT)) {
         uint8_t n = pin - PIN_DIR_BASE;
         smot_set_dir(n, !dir_level[n]);

@@ -60,6 +60,18 @@ config UPC_STEP_HALF_TICKS
       high for this many 5 ns ticks, then low for the same time. 400 =
       2 us high, comfortably above the A4982's 1 us minimum.
 
+config UPC_STEP_SINGLE
+    bool "One timer event per step (no unstep events)"
+    depends on UPC_CORE_FM
+    default n
+    help
+      The stepper engine makes the whole STEP pulse in hardware, so the
+      "unstep" timer event of Klipper's step/unstep path does nothing but
+      cost an interrupt. With this, the stepper code runs one event per
+      step (its single-schedule mode, as for "step on both edges") and
+      every STEP pin toggle starts one engine pulse. The host's step
+      timing is unchanged. Halves the step interrupts.
+
 config UPC_ADC_SETTLE_US
     int "Wait after selecting an ADC input before reading (microseconds)"
     depends on UPC_CORE_IO
