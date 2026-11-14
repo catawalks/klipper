@@ -16,7 +16,11 @@ ENTRY(_start)
 
 MEMORY
 {
-  itcm  (rx) : ORIGIN = 0x00000000,     LENGTH = CONFIG_UPC_ITCM_SIZE
+  /* Twice the real ITCM: without the linker plugin gcc's first link pass
+     places the objects' non-LTO code, which is about 4 KiB larger than
+     the final image and must not fail here. The real limit is checked
+     on klipper.bin (src/upc/Makefile). */
+  itcm  (rx) : ORIGIN = 0x00000000,     LENGTH = 2 * CONFIG_UPC_ITCM_SIZE
   dram  (rw) : ORIGIN = UPC_DATA_BASE,  LENGTH = 0x8000
   stack (rw) : ORIGIN = UPC_STACK_BASE, LENGTH = 0x8000
 }
