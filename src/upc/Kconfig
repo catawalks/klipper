@@ -63,6 +63,7 @@ config UPC_STEP_HALF_TICKS
 config UPC_STEP_SINGLE
     bool "One timer event per step (no unstep events)"
     depends on UPC_CORE_FM
+    select HAVE_STEPPER_HW_PULSE
     default n
     help
       The stepper engine makes the whole STEP pulse in hardware, so the
