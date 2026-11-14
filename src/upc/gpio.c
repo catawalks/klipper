@@ -147,10 +147,9 @@ smot_claim(uint8_t n)
         return;
     smot_owned |= 1u << n;
     uint32_t b = SMOT_BASE(n);
-    // Engine setup the stock app does at start-up (measured 2026-10-27).
-    // A UPC reset keeps these, so earlier tests worked only because the
-    // stock app had run first; after a /DEBUG_MACHINE boot they are at
-    // their power-on values and the engine counts pulses but drives nothing.
+    // Engine setup the stock firmware does at start-up. With the power-on
+    // values the engine counts pulses but drives nothing; a UPC reset
+    // keeps the registers.
     reg_write(b + SMOT_BLOCK_EN, 1);
     reg_write(b + SMOT_SETUP10, 8);
     reg_write(b + SMOT_SETUP14, 4);
@@ -163,10 +162,9 @@ smot_claim(uint8_t n)
     reg_write(b + SMOT_CTRL, SMOT_CTRL_STOCK | (dir_level[n] ? SMOT_CTRL_DIR : 0));
 }
 
-// Step-rate diagnostics: above ~20k steps/s steps get lost (measured
-// 2026-10-18). Count pulses and pulses requested while the engine still
-// reports busy (+0x64 bit 8); in that case wait for the running pulse (a
-// few us) instead of overwriting it. upc_step_stats reports the counters.
+// A pulse requested while the engine still reports busy (+0x64 bit 8)
+// waits for the running pulse (a few us): starting over it loses steps.
+// Pulses and such waits are counted; upc_step_stats reports the counters.
 static uint32_t smot_pulses[SMOT_COUNT], smot_busy_hits[SMOT_COUNT];
 static uint32_t smot_dir_waits[SMOT_COUNT];
 
@@ -208,7 +206,7 @@ smot_pulse(uint8_t n)
 // When interval isn't a multiple of 4 each step comes (interval & 3)
 // ticks early; a move is kept short enough that this stays below
 // CONFIG_UPC_STEP_BATCH_ERR ticks. +0x78 counts the engine's output edges
-// down (24 bits, measured 2026-11-03).
+// down (24 bits).
 #define BURST_MAX 32767         // CMD holds 2 * steps in 16 bits
 
 // Can 'count' steps at this interval start as an engine move?
@@ -321,9 +319,8 @@ static void
 smot_set_dir(uint8_t n, uint8_t val)
 {
     // Klipper changes direction ~2 us after the last step started, while
-    // that 4 us engine pulse is still running. The stock app only writes
-    // CTRL to an idle engine; doing it mid-pulse lost ~0.2 step per
-    // back-and-forth cycle on X/Y (2026-10-27 drift test). Klipper's dir
+    // that 4 us engine pulse is still running. CTRL must only be written
+    // to an idle engine: doing it mid-pulse loses steps. Klipper's dir
     // setup time before the next step starts after this returns.
     uint32_t b = SMOT_BASE(n);
     if (smot_wait_idle(b))
