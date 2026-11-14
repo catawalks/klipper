@@ -8,6 +8,7 @@ config UPC_SELECT
     select HAVE_GPIO
     select HAVE_GPIO_ADC if UPC_CORE_IO
     select HAVE_GPIO_HARD_PWM
+    select HAVE_IRQ_WAIT_TIMERS
     select HAVE_LIMITED_CODE_SIZE
     select SERIAL
 

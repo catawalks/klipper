@@ -215,29 +215,43 @@ timer_dispatch_task_poll(void)
     console_poll();
 }
 
-// Ticks spent dispatching timers since sched.c last reset it. Timers run
-// from irq_poll(), also while run_tasks() "sleeps" in irq_wait(), which its
-// stats leave out; sched.c adds this back so mcu_awake shows the real load.
-uint32_t upc_sleep_busy;
-
 void
 irq_poll(void)
 {
     if (timer_pending()) {
         timer_clear_pending();
-        uint32_t t0 = timer_read_time();
         uint32_t next = timer_dispatch_many_polling();
         timer_set(next);
-        upc_sleep_busy += timer_read_time() - t0;
     }
     console_poll();
     UPC_IPC->heartbeat++;
 }
 
+// Timers also run while run_tasks() "sleeps" in irq_wait(). The ticks
+// spent on that are counted here so that sched.c can leave them out of
+// the sleep time (CONFIG_HAVE_IRQ_WAIT_TIMERS).
+static uint32_t wait_timer_ticks;
+
 void
 irq_wait(void)
 {
-    irq_poll();
+    if (timer_pending()) {
+        timer_clear_pending();
+        uint32_t start = timer_read_time();
+        uint32_t next = timer_dispatch_many_polling();
+        timer_set(next);
+        wait_timer_ticks += timer_read_time() - start;
+    }
+    console_poll();
+    UPC_IPC->heartbeat++;
+}
+
+uint32_t
+irq_wait_timer_ticks(void)
+{
+    uint32_t ticks = wait_timer_ticks;
+    wait_timer_ticks = 0;
+    return ticks;
 }
 
 

@@ -244,10 +244,6 @@ run_tasks(void)
         irq_poll();
         if (SchedStatus.tasks_status != TS_REQUESTED) {
             start -= timer_read_time();
-#if CONFIG_MACH_UPC
-            extern uint32_t upc_sleep_busy;
-            upc_sleep_busy = 0;
-#endif
             irq_disable();
             if (SchedStatus.tasks_status != TS_REQUESTED) {
                 // Sleep processor (only run timers) until tasks woken
@@ -258,9 +254,9 @@ run_tasks(void)
             }
             irq_enable();
             start += timer_read_time();
-#if CONFIG_MACH_UPC
-            // count the timer work done while "asleep" (UPC: no interrupts)
-            start -= upc_sleep_busy;
+#if CONFIG_HAVE_IRQ_WAIT_TIMERS
+            // The board ran timers from irq_wait() - not sleep time
+            start -= irq_wait_timer_ticks();
 #endif
         }
         SchedStatus.tasks_status = TS_RUNNING;

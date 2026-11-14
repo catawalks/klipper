@@ -339,6 +339,8 @@ config INITIAL_PINS
 
 # The HAVE_x options allow boards to disable support for some commands
 # if the hardware does not support the feature.
+config HAVE_IRQ_WAIT_TIMERS
+    bool
 config HAVE_STEPPER_HW_PULSE
     bool
 config HAVE_STEPPER_HW_BURST
