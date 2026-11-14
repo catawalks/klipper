@@ -5766,6 +5766,52 @@ cs_pin:
 #   above parameters.
 ```
 
+### [upc_stats]
+
+Diagnostic support for the Marvell 88PA6170 "UPC" micro-controller
+port (Sindoh 3DWOX DP200). It reports the counters of the stepper
+engines on the micro-controller named "mcu". See the
+[G-Code reference](G-Codes.md#upc_stats) for the command.
+
+```
+[upc_stats]
+```
+
+### [upc_clockcheck]
+
+Clock check for the Marvell 88PA6170 "UPC" micro-controller port. The
+host's first estimate of a UPC micro-controller's clock frequency can
+be a few percent off, which raises a "configured for ... but running
+at ..." warning and mistimes the commands sent in the first seconds.
+This module repeats the check once the estimate has settled and
+withdraws the warning if the frequency is then correct. See the
+[G-Code reference](G-Codes.md#upc_clockcheck) for the command.
+
+```
+[upc_clockcheck]
+#settle_time: 30
+#   The time (in seconds) after start-up at which the clock frequency
+#   is checked again. The default is 30.
+```
+
+### [dp200_cartridge]
+
+Support for reading the chip of the Sindoh 3DWOX DP200 filament
+cartridge (a DS28E22 behind a DS2465 I2C to 1-Wire bridge on the host).
+The chip is only read; nothing is written to it. The cartridge
+information is available as
+[status](Status_Reference.md#dp200_cartridge) and via the
+[CARTRIDGE_READ](G-Codes.md#dp200_cartridge) command.
+
+```
+[dp200_cartridge]
+#i2c_device: /dev/i2c-3
+#   The Linux I2C device of the 1-Wire bridge. The default is
+#   /dev/i2c-3.
+#i2c_address: 24
+#   The I2C address of the 1-Wire bridge. The default is 24 (0x18).
+```
+
 ## Common bus parameters
 
 ### Common SPI settings

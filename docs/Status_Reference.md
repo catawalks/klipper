@@ -89,6 +89,22 @@ The following information is available in the `display_status` object
   `virtual_sdcard.progress` if no recent `M73` received).
 - `message`: The message contained in the last `M117` G-Code command.
 
+## dp200_cartridge
+
+The following information is available in the
+[dp200_cartridge](Config_Reference.md#dp200_cartridge) object:
+- `present`: Returns True if a cartridge chip was found.
+- `busy`: Returns True while the chip is being read.
+- `rom_id`: The serial number of the chip.
+- `product`, `material`: The product and material names stored in the
+  chip.
+- `total_m`, `used_m`, `remaining_m`: The filament length (in meters)
+  the cartridge was filled with, that has been used and that is left.
+- `remaining_percent`: The filament left, in percent.
+- `fuses_used`: The number of one-time programmable bits already
+  used in the chip.
+- `error`: The error message of the last read, if it failed.
+
 ## endstop_phase
 
 The following information is available in the

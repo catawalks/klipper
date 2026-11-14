@@ -340,6 +340,16 @@ Also provided is the following extended G-Code command:
   setting the supplied `MSG` as the current display message.  If
   `MSG` is omitted the display will be cleared.
 
+### [dp200_cartridge]
+
+The following command is available when a
+[dp200_cartridge config section](Config_Reference.md#dp200_cartridge)
+is enabled.
+
+#### CARTRIDGE_READ
+`CARTRIDGE_READ`: Read the filament cartridge chip again and report
+its contents. This command is not available while printing.
+
 ### [dual_carriage]
 
 The following command is available when the
@@ -1700,6 +1710,31 @@ three possible combinations of options:
   `value = start + step_delta * floor(z_height / step_height)`.
   You can simply count bands or read tuning tower labels to determine
   the optimum value.
+
+### [upc_clockcheck]
+
+The following command is available when an
+[upc_clockcheck config section](Config_Reference.md#upc_clockcheck)
+is enabled.
+
+#### UPC_WAIT_CLOCK
+`UPC_WAIT_CLOCK [TIMEOUT=<seconds>]`: Wait until the host's clock
+frequency estimate of every micro-controller is within 0.3% of its
+configured frequency, for example before homing right after a restart.
+The command reports an error if that is not the case after `TIMEOUT`
+seconds (default 60).
+
+### [upc_stats]
+
+The following command is available when an
+[upc_stats config section](Config_Reference.md#upc_stats) is enabled.
+
+#### UPC_STEP_STATS
+`UPC_STEP_STATS`: Report, for each stepper engine of the UPC
+micro-controller, the number of step pulses made, the number of pulses
+that had to wait for the previous one to finish (`busy_hits`) and the
+number of direction changes that had to wait for a running pulse
+(`dir_waits`).
 
 ### [virtual_sdcard]
 
