@@ -27,8 +27,12 @@ struct gpio_out gpio_out_setup(uint8_t pin, uint8_t val);
 void gpio_out_reset(struct gpio_out g, uint8_t val);
 void gpio_out_toggle_noirq(struct gpio_out g);
 void gpio_out_toggle(struct gpio_out g);
-// multi-step engine moves (CONFIG_UPC_STEP_BATCH, src/stepper.c)
-uint32_t gpio_step_burst(struct gpio_out g, uint32_t steps, uint32_t half);
+// Hardware step generator (CONFIG_HAVE_STEPPER_HW_BURST, src/stepper.c)
+int gpio_step_burst_ok(struct gpio_out g, uint32_t interval, uint32_t count);
+uint32_t gpio_step_burst_lead(struct gpio_out g, uint32_t interval);
+uint32_t gpio_step_burst_gap(struct gpio_out g);
+uint32_t gpio_step_burst_start(struct gpio_out g, uint32_t interval
+                               , uint32_t max_steps, uint32_t *ref);
 uint32_t gpio_step_burst_done(struct gpio_out g, uint32_t c0);
 int gpio_step_burst_busy(struct gpio_out g);
 void gpio_step_burst_end(struct gpio_out g);

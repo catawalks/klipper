@@ -197,13 +197,57 @@ smot_pulse(uint8_t n)
 }
 
 #if CONFIG_UPC_STEP_BATCH
-// Multi-step engine moves for src/stepper.c (CONFIG_UPC_STEP_BATCH):
-// 'steps' steps at 'half' engine ticks per edge, so a step's rising edge
-// comes every 2 * half ticks. +0x78 counts the engine's output edges down
-// (24 bits, measured 2026-11-03); returns its value at the start.
-uint32_t
-gpio_step_burst(struct gpio_out g, uint32_t steps, uint32_t half)
+// Hardware step generator interface for src/stepper.c
+// (CONFIG_HAVE_STEPPER_HW_BURST): a constant-rate block of steps runs as
+// one multi-step engine move.
+//
+// The engine clock is half the timer clock, so a step interval of
+// 'interval' timer ticks is interval / 4 engine ticks per output edge.
+// A step's rising edge comes one edge time (half an interval) after the
+// engine starts, and the line stays high that long after the last one.
+// When interval isn't a multiple of 4 each step comes (interval & 3)
+// ticks early; a move is kept short enough that this stays below
+// CONFIG_UPC_STEP_BATCH_ERR ticks. +0x78 counts the engine's output edges
+// down (24 bits, measured 2026-11-03).
+#define BURST_MAX 32767         // CMD holds 2 * steps in 16 bits
+
+// Can 'count' steps at this interval start as an engine move?
+int
+gpio_step_burst_ok(struct gpio_out g, uint32_t interval, uint32_t count)
 {
+    return (count >= CONFIG_UPC_STEP_BATCH_MIN
+            && (interval >> 2) >= CONFIG_UPC_STEP_HALF_TICKS);
+}
+
+// Ticks from the engine's start to its first step, and from its last
+// step until it is idle
+uint32_t
+gpio_step_burst_lead(struct gpio_out g, uint32_t interval)
+{
+    return interval / 2;
+}
+
+// Ticks the engine needs after a normal step (a one-step move)
+uint32_t
+gpio_step_burst_gap(struct gpio_out g)
+{
+    return 4 * CONFIG_UPC_STEP_HALF_TICKS;
+}
+
+// Start a move of up to max_steps steps; returns the steps it makes and
+// sets *ref for gpio_step_burst_done() and gpio_step_burst_stop()
+uint32_t
+gpio_step_burst_start(struct gpio_out g, uint32_t interval, uint32_t max_steps
+                      , uint32_t *ref)
+{
+    uint32_t steps = max_steps, half = interval >> 2;
+    if (interval & 3) {
+        uint32_t m = CONFIG_UPC_STEP_BATCH_ERR / (interval & 3);
+        if (steps > m)
+            steps = m;
+    }
+    if (steps > BURST_MAX)
+        steps = BURST_MAX;
     uint8_t n = g.pin - PIN_STEP_BASE;
     uint32_t b = SMOT_BASE(n);
     smot_pulses[n] += steps;
@@ -214,7 +258,8 @@ gpio_step_burst(struct gpio_out g, uint32_t steps, uint32_t half)
     reg_write(b + SMOT_PERIOD, half);
     reg_write(b + SMOT_CMD, ((2 * steps) << 16) | SMOT_MODE_CONST);
     reg_write(b + SMOT_START, 1);
-    return c0;
+    *ref = c0;
+    return steps;
 }
 
 // Steps of the running move made so far (a step counts from its rising

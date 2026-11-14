@@ -47,8 +47,8 @@ struct stepper {
     uint32_t position;
     struct move_queue_head mq;
     struct trsync_signal stop_signal;
-#if CONFIG_UPC_STEP_BATCH
-    uint32_t burst, burst_c0;   // steps of the running engine move, its counter
+#if CONFIG_HAVE_STEPPER_HW_BURST
+    uint32_t burst, burst_ref;  // steps in the running burst, board reference
 #endif
     // gcc (pre v6) does better optimization when uint8_t are bitfields
     uint8_t flags : 8;
@@ -62,34 +62,30 @@ enum {
     SF_BURST_NEXT=1<<7
 };
 
-#if CONFIG_UPC_STEP_BATCH
-// UPC: a constant-rate block (add == 0) runs as one multi-step move of the
-// hardware stepper engine instead of one timer event per step. The engine
-// clock is half the timer's (2026-11-03), so 'interval' timer ticks are
-// interval / 4 engine ticks per edge and a step's rising edge comes half
-// an interval after the engine starts: the move is started that much
-// before the first step. When interval isn't a multiple of 4 each step
-// comes (interval & 3) ticks early; a block is split so that this stays
-// below CONFIG_UPC_STEP_BATCH_ERR ticks, and each part starts on time.
-// Positions mid-move and after a stop come from the engine's edge counter.
-// A block's last step is not part of the engine move but stepped on its
-// own: after an engine move's last rising edge the line stays high for half
-// an interval, which on a slow block (e.g. a first-layer extruder at ~2 ms
-// per step) holds up the next block past the 1 ms "Stepper too far in past"
-// limit (2026-11-05, work printer).
-#define BURST_MAX 32767         // CMD holds 2 * steps in 16 bits
-#define BURST_GAP (4 * CONFIG_UPC_STEP_HALF_TICKS)  // a one-step pulse
+#if CONFIG_HAVE_STEPPER_HW_BURST
+// Support for boards with a hardware step generator: a constant-rate
+// block (add == 0) is handed to the generator as a "burst" of steps
+// instead of scheduling one timer event per step. The board code
+// (board/gpio.h) decides which blocks qualify and how many steps one
+// burst may hold; a block may take several bursts, each started on the
+// block's own schedule. The generator is in use from
+// gpio_step_burst_lead() ticks before a burst's first step until that
+// long after its last step. A block's last step is always a normal step,
+// so the next block is loaded from the usual step event. The position
+// during a burst and after a stop comes from the generator.
 
+// Check if the block just loaded can start as a burst
 static void
 stepper_burst_check(struct stepper *s, uint32_t interval, int_fast16_t add
                     , uint_fast8_t was_active, uint32_t min_next_time)
 {
-    if (add || s->count < CONFIG_UPC_STEP_BATCH_MIN
-        || (interval >> 2) < CONFIG_UPC_STEP_HALF_TICKS)
+    if (add || !gpio_step_burst_ok(s->step_pin, interval, s->count))
         return;
-    uint32_t start = s->next_step_time - interval / 2;
-    if (was_active && timer_is_before(start, min_next_time + BURST_GAP))
-        // the previous step's pulse may still run: step this block
+    uint32_t start = s->next_step_time - gpio_step_burst_lead(s->step_pin
+                                                               , interval);
+    if (was_active && timer_is_before(start, min_next_time
+                                      + gpio_step_burst_gap(s->step_pin)))
+        // Too soon after the previous step - step this block normally
         return;
     s->flags |= SF_BURST_NEXT;
     s->time.waketime = start;
@@ -97,30 +93,24 @@ stepper_burst_check(struct stepper *s, uint32_t interval, int_fast16_t add
 
 static uint_fast8_t stepper_load_next(struct stepper *s);
 
-// Timer event of a stepper in engine-move mode
+// Timer event of a stepper that is running a block as bursts
 static uint_fast8_t
 stepper_event_burst(struct stepper *s)
 {
     uint32_t interval = s->interval;            // add == 0
+    uint32_t lead = gpio_step_burst_lead(s->step_pin, interval);
     if (s->flags & SF_BURST_NEXT) {
-        // Start the engine: the part's first step is at s->next_step_time;
-        // the block's last step is left out (stepped below)
-        uint32_t steps = s->count - 1;
-        if (interval & 3) {
-            uint32_t m = CONFIG_UPC_STEP_BATCH_ERR / (interval & 3);
-            if (steps > m)
-                steps = m;
-        }
-        if (steps > BURST_MAX)
-            steps = BURST_MAX;
+        // Start a burst: its first step is at s->next_step_time. The
+        // block's last step is left out (it is stepped below).
         s->flags &= ~SF_BURST_NEXT;
+        uint32_t steps = gpio_step_burst_start(s->step_pin, interval
+                                               , s->count - 1, &s->burst_ref);
         s->burst = steps;
-        s->burst_c0 = gpio_step_burst(s->step_pin, steps, interval >> 2);
         s->next_step_time += (steps - 1) * interval;  // its last step
-        s->time.waketime = s->next_step_time + interval / 2;
+        s->time.waketime = s->next_step_time + lead;
         return SF_RESCHEDULE;
     }
-    // The part should be over: wait for the engine (its clock may lag)
+    // The burst should be over - wait for the generator if it is not
     if (gpio_step_burst_busy(s->step_pin)) {
         s->time.waketime = timer_read_time() + timer_from_us(1);
         return SF_RESCHEDULE;
@@ -129,13 +119,13 @@ stepper_event_burst(struct stepper *s)
     s->burst = 0;
     s->next_step_time += interval;
     if (s->count > 1) {
-        // more of this block: the next part one interval after the last step
-        s->time.waketime = s->next_step_time - interval / 2;
+        // More of this block - the next burst follows one interval later
+        s->time.waketime = s->next_step_time - lead;
         s->flags |= SF_BURST_NEXT;
         return SF_RESCHEDULE;
     }
-    // Only the block's last step is left: a normal step at its time (the
-    // engine is idle by then), then the next block loads as usual
+    // Only the block's last step is left - it is a normal step at its
+    // time (the generator is idle by then)
     gpio_step_burst_end(s->step_pin);
     s->time.waketime = s->next_step_time;
     return SF_RESCHEDULE;
@@ -202,12 +192,12 @@ stepper_load_next(struct stepper *s)
             min_next_time = curtime + s->step_pulse_ticks;
             if (timer_is_before(s->time.waketime, min_next_time))
                 s->time.waketime = min_next_time;
-#if CONFIG_UPC_STEP_BATCH
+#if CONFIG_HAVE_STEPPER_HW_BURST
             stepper_burst_check(s, move_interval, move_add, 1, min_next_time);
 #endif
             return SF_RESCHEDULE;
         }
-#if CONFIG_UPC_STEP_BATCH
+#if CONFIG_HAVE_STEPPER_HW_BURST
         stepper_burst_check(s, move_interval, move_add, was_active
                             , min_next_time);
 #endif
@@ -271,7 +261,7 @@ static uint_fast8_t
 stepper_event_full(struct timer *t)
 {
     struct stepper *s = container_of(t, struct stepper, time);
-#if CONFIG_UPC_STEP_BATCH
+#if CONFIG_HAVE_STEPPER_HW_BURST
     if (s->flags & SF_BURST_NEXT || s->burst)
         return stepper_event_burst(s);
 #endif
@@ -421,9 +411,9 @@ stepper_get_position(struct stepper *s)
 {
     uint32_t position = s->position;
     // If stepper is mid-move, subtract out steps not yet taken
-#if CONFIG_UPC_STEP_BATCH
+#if CONFIG_HAVE_STEPPER_HW_BURST
     if (s->burst)
-        position -= s->count - gpio_step_burst_done(s->step_pin, s->burst_c0);
+        position -= s->count - gpio_step_burst_done(s->step_pin, s->burst_ref);
     else
 #endif
     if (s->flags & SF_SINGLE_SCHED)
@@ -455,10 +445,10 @@ stepper_stop(struct trsync_signal *tss, uint8_t reason)
 {
     struct stepper *s = container_of(tss, struct stepper, stop_signal);
     sched_del_timer(&s->time);
-#if CONFIG_UPC_STEP_BATCH
+#if CONFIG_HAVE_STEPPER_HW_BURST
     if (s->burst) {
-        // stop the engine; its steps made count as taken
-        s->count -= gpio_step_burst_stop(s->step_pin, s->burst_c0);
+        // Stop the generator - the steps it made count as taken
+        s->count -= gpio_step_burst_stop(s->step_pin, s->burst_ref);
         s->burst = 0;
     }
 #endif

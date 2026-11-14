@@ -77,6 +77,7 @@ config UPC_STEP_BATCH
     bool "Run constant-rate step blocks as multi-step engine moves"
     depends on UPC_CORE_FM
     select UPC_STEP_SINGLE
+    select HAVE_STEPPER_HW_BURST
     default n
     help
       A queue_step block with add == 0 is handed to the stepper engine
