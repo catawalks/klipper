@@ -40,10 +40,12 @@ class UPCClockCheck:
         # (mcu, configured Hz, currently estimated Hz) for every MCU
         for name, mcu in self.printer.lookup_objects(module='mcu'):
             mcu_freq = mcu.seconds_to_clock(1.)
-            calc_freq = mcu.estimated_print_time(eventtime + 1.) - mcu.estimated_print_time(eventtime)
+            calc_freq = (mcu.estimated_print_time(eventtime + 1.)
+                         - mcu.estimated_print_time(eventtime))
             yield mcu, mcu_freq, calc_freq * mcu_freq
 
-    cmd_UPC_WAIT_CLOCK_help = "Wait until the MCU clock estimates have settled (after a restart)"
+    cmd_UPC_WAIT_CLOCK_help = ("Wait until the MCU clock estimates have"
+                               " settled (after a restart)")
     def cmd_UPC_WAIT_CLOCK(self, gcmd):
         timeout = gcmd.get_float('TIMEOUT', 60., minval=0.)
         reactor = self.printer.get_reactor()
@@ -51,14 +53,16 @@ class UPCClockCheck:
         told = False
         while True:
             now = reactor.monotonic()
-            off = max([abs(c - f) / f for m, f, c in self._estimates(now)] or [0.])
+            off = max([abs(c - f) / f for m, f, c in self._estimates(now)]
+                      or [0.])
             if off <= 0.003:
                 if told:
                     gcmd.respond_info("MCU clock settled")
                 return
             if now > end:
-                raise gcmd.error("MCU clock estimate still %.1f %% off after %.0f s"
-                                 % (off * 100., timeout))
+                raise gcmd.error(
+                    "MCU clock estimate still %.1f %% off after %.0f s"
+                    % (off * 100., timeout))
             if not told:
                 gcmd.respond_info("Waiting for the MCU clock estimate to settle"
                                   " (%.1f %% off)" % (off * 100.))
@@ -74,7 +78,8 @@ class UPCClockCheck:
                 logging.info("upc_clockcheck: MCU '%s' still at %.3f MHz",
                              mcu_name, calc_freq / 1e6)
                 continue
-            prefix = "MCU '%s' configured for %dMhz but running at" % (mcu_name, mhz)
+            prefix = ("MCU '%s' configured for %dMhz but running at"
+                      % (mcu_name, mhz))
             stale = [w for w in pconfig.status_warnings
                      if w.get('type') == 'runtime_warning'
                      and w.get('message', '').startswith(prefix)]

@@ -21,12 +21,17 @@ import fcntl, logging, os, struct, threading, time
 I2C_SLAVE = 0x0703
 REG_CMD, REG_STATUS, REG_DATA, REG_CONFIG = 0x60, 0x61, 0x62, 0x67
 ST_1WB, ST_PPD = 0x01, 0x02
-CFG_OVERDRIVE_APU = 0x69          # low nibble 1WS|APU = 0x9, high nibble = complement
-OW_RESET, OW_WRITE_BYTE, OW_READ_BYTE = 0xB4, 0xA5, 0x96   # DS2465 function commands
-READ_ROM, SKIP_ROM = 0x33, 0xCC                              # 1-Wire ROM commands
-READ_MEMORY, READ_STATUS = 0xF0, 0xAA                        # DS28E22 (read-only subset)
+# low nibble 1WS|APU = 0x9, high nibble = complement
+CFG_OVERDRIVE_APU = 0x69
+# DS2465 function commands
+OW_RESET, OW_WRITE_BYTE, OW_READ_BYTE = 0xB4, 0xA5, 0x96
+# 1-Wire ROM commands
+READ_ROM, SKIP_ROM = 0x33, 0xCC
+# DS28E22 (read-only subset)
+READ_MEMORY, READ_STATUS = 0xF0, 0xAA
 FAMILY_DS28E22 = 0x48
-MM_PER_EPULSE = 500. / 458.83     # stock: ePulse x 500 extruder steps / (458.83 steps/mm)
+# stock: ePulse x 500 extruder steps / (458.83 steps/mm)
+MM_PER_EPULSE = 500. / 458.83
 
 def crc8(data):
     crc = 0
@@ -129,7 +134,8 @@ def read_cartridge(device, address):
         'total_m': total_m,
         'used_m': round(used_mm / 1000., 2),
         'remaining_m': round(remaining_m, 2),
-        'remaining_percent': round(100. * remaining_m / total_m, 1) if total_m else 0.,
+        'remaining_percent': (round(100. * remaining_m / total_m, 1)
+                              if total_m else 0.),
         'fuses_used': fuses,
         'params': list(struct.unpack_from('<6I', p3, 0)),
     }
@@ -145,7 +151,8 @@ class DP200Cartridge:
         self.printer.register_event_handler("klippy:ready", self._start_read)
         gcode = self.printer.lookup_object('gcode')
         gcode.register_command('CARTRIDGE_READ', self.cmd_CARTRIDGE_READ,
-                               desc="Read the filament cartridge chip (read-only)")
+                               desc="Read the filament cartridge chip"
+                               " (read-only)")
     def _start_read(self):
         if self.busy:
             return False
@@ -165,15 +172,18 @@ class DP200Cartridge:
         self.status = result
         if result.get('present'):
             msg = ("Cartridge %s (%s): %.1f of %d m left (%.0f%%)"
-                   % (result['product'], result['material'], result['remaining_m'],
-                      result['total_m'], result['remaining_percent']))
+                   % (result['product'], result['material'],
+                      result['remaining_m'], result['total_m'],
+                      result['remaining_percent']))
         else:
-            msg = "No cartridge chip" + (" (%s)" % result['error'] if result.get('error') else "")
+            msg = "No cartridge chip" + (" (%s)" % result['error']
+                                         if result.get('error') else "")
         logging.info("dp200_cartridge: %s", msg)
         self.printer.lookup_object('gcode').respond_info(msg)
     def cmd_CARTRIDGE_READ(self, gcmd):
         ps = self.printer.lookup_object('print_stats', None)
-        if ps is not None and ps.get_status(self.reactor.monotonic())['state'] == 'printing':
+        if (ps is not None and ps.get_status(self.reactor.monotonic())['state']
+                == 'printing'):
             raise gcmd.error("CARTRIDGE_READ is not allowed while printing")
         if not self._start_read():
             gcmd.respond_info("Cartridge read already in progress")
