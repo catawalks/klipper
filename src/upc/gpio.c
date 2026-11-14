@@ -159,7 +159,8 @@ smot_claim(uint8_t n)
     reg_write(b + SMOT_CLEAR, SMOT_DONE_BIT);
     reg_write(b + SMOT_ENABLE, 1);
     reg_write(b + SMOT_PERIOD, CONFIG_UPC_STEP_HALF_TICKS);
-    reg_write(b + SMOT_CTRL, SMOT_CTRL_STOCK | (dir_level[n] ? SMOT_CTRL_DIR : 0));
+    reg_write(b + SMOT_CTRL
+              , SMOT_CTRL_STOCK | (dir_level[n] ? SMOT_CTRL_DIR : 0));
 }
 
 // A pulse requested while the engine still reports busy (+0x64 bit 8)
@@ -273,7 +274,8 @@ gpio_step_burst_done(struct gpio_out g, uint32_t c0)
 int
 gpio_step_burst_busy(struct gpio_out g)
 {
-    return reg_read(SMOT_BASE(g.pin - PIN_STEP_BASE) + SMOT_STATUS) & SMOT_DONE_BIT;
+    uint32_t b = SMOT_BASE(g.pin - PIN_STEP_BASE);
+    return reg_read(b + SMOT_STATUS) & SMOT_DONE_BIT;
 }
 
 // After the last move: the one-step period back for single steps
@@ -446,8 +448,10 @@ dsens_init(void)
     if (reg_read(DEC_SENSOR_BASE + 0x200) == 0x180)
         return;
     static const uint32_t init[][2] = {
-        { 0x070, 0x340 }, { 0x074, 0xa }, { 0x078, 0xc80001 }, { 0x07c, 0x100c8 },
-        { 0x080, 0x340 }, { 0x084, 0xa }, { 0x088, 0xc80001 }, { 0x08c, 0x100c8 },
+        { 0x070, 0x340 }, { 0x074, 0xa },
+        { 0x078, 0xc80001 }, { 0x07c, 0x100c8 },
+        { 0x080, 0x340 }, { 0x084, 0xa },
+        { 0x088, 0xc80001 }, { 0x08c, 0x100c8 },
         { 0x200, 0x180 },
     };
     for (uint32_t i = 0; i < ARRAY_SIZE(init); i++)
