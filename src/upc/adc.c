@@ -94,8 +94,8 @@ gpio_adc_sample(struct gpio_adc g)
             return 0;
         }
     } else if (adc_state == ADC_SETTLING
-               || (adc_state == ADC_SETTLED
-                   && now - adc_last_use < timer_from_us(CONFIG_UPC_ADC_HOLD_US))) {
+               || (adc_state == ADC_SETTLED && now - adc_last_use
+                   < timer_from_us(CONFIG_UPC_ADC_HOLD_US))) {
         // Another input is settling or being sampled - try again shortly
         return timer_from_us(500);
     }
