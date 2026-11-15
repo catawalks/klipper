@@ -100,6 +100,16 @@ config UPC_STEP_BATCH_ERR
       the remainder makes each step up to 3 timer ticks early. Longer
       blocks are split so this stays below the limit (400 = 1 us).
 
+config UPC_STEP_ARM
+    bool "Compile the step path in ARM mode (faster, larger image)"
+    depends on UPC_CORE_FM && UPC_THUMB
+    default n
+    help
+      Build stepper.c, the timer dispatch and the UPC timer, gpio and
+      main code with -marm instead of -mthumb. A step event then takes
+      fewer instructions, at the cost of a larger image (see the size
+      check on klipper.bin against UPC_ITCM_SIZE).
+
 config UPC_ADC_SETTLE_US
     int "Wait after selecting an ADC input before reading (microseconds)"
     depends on UPC_CORE_IO
