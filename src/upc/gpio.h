@@ -27,6 +27,8 @@ struct gpio_out gpio_out_setup(uint8_t pin, uint8_t val);
 void gpio_out_reset(struct gpio_out g, uint8_t val);
 void gpio_out_toggle_noirq(struct gpio_out g);
 void gpio_out_toggle(struct gpio_out g);
+// One complete pulse on a step pin (CONFIG_HAVE_STEPPER_HW_PULSE)
+void gpio_step_pulse(struct gpio_out g);
 // Hardware step generator (CONFIG_HAVE_STEPPER_HW_BURST, src/stepper.c)
 int gpio_step_burst_ok(struct gpio_out g, uint32_t interval, uint32_t count);
 uint32_t gpio_step_burst_lead(struct gpio_out g, uint32_t interval);

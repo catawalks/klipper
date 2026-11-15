@@ -195,6 +195,18 @@ smot_pulse(uint8_t n)
     reg_write(b + SMOT_START, 1);
 }
 
+#if CONFIG_UPC_STEP_SINGLE
+// A step from the timer event in src/stepper.c
+// (CONFIG_HAVE_STEPPER_HW_PULSE): the pin is known to be a step pin and
+// every call is one pulse, so the pin decoding and level tracking of
+// gpio_out_toggle_noirq() are left out.
+void
+gpio_step_pulse(struct gpio_out g)
+{
+    smot_pulse(g.pin - PIN_STEP_BASE);
+}
+#endif
+
 #if CONFIG_UPC_STEP_BATCH
 // Hardware step generator interface for src/stepper.c
 // (CONFIG_HAVE_STEPPER_HW_BURST): a constant-rate block of steps runs as

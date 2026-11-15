@@ -265,8 +265,20 @@ stepper_event_full(struct timer *t)
     if (s->flags & SF_BURST_NEXT || s->burst)
         return stepper_event_burst(s);
 #endif
+#if CONFIG_HAVE_STEPPER_HW_PULSE
+    // The board times the pulse itself and gpio_step_pulse() waits for
+    // a pulse that is still running, so within a block the earliest
+    // next step is taken from this event's scheduled time instead of a
+    // timer read. A block's last step reads the timer (the next block's
+    // direction change and start depend on it).
+    gpio_step_pulse(s->step_pin);
+    uint32_t curtime = s->time.waketime;
+    if (unlikely(s->count == 1))
+        curtime = timer_read_time();
+#else
     gpio_out_toggle_noirq(s->step_pin);
     uint32_t curtime = timer_read_time();
+#endif
     uint32_t min_next_time = curtime + s->step_pulse_ticks;
     uint32_t count = s->count - 1;
     if (likely(count & 1 && !(s->flags & SF_SINGLE_SCHED)))
