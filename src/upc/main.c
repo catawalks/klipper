@@ -218,7 +218,8 @@ timer_dispatch_task_poll(void)
 void
 irq_poll(void)
 {
-    if (timer_pending()) {
+    uint32_t now;
+    if (timer_pending(&now)) {
         timer_clear_pending();
         uint32_t next = timer_dispatch_many_polling();
         timer_set(next);
@@ -235,9 +236,9 @@ static uint32_t wait_timer_ticks;
 void
 irq_wait(void)
 {
-    if (timer_pending()) {
+    uint32_t start;
+    if (timer_pending(&start)) {
         timer_clear_pending();
-        uint32_t start = timer_read_time();
         uint32_t next = timer_dispatch_many_polling();
         timer_set(next);
         wait_timer_ticks += timer_read_time() - start;

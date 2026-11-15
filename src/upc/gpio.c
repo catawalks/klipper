@@ -253,7 +253,11 @@ gpio_step_burst_start(struct gpio_out g, uint32_t interval, uint32_t max_steps
 {
     uint32_t steps = max_steps, half = interval >> 2;
     if (interval & 3) {
-        uint32_t m = CONFIG_UPC_STEP_BATCH_ERR / (interval & 3);
+        // CONFIG_UPC_STEP_BATCH_ERR / (interval & 3) without a divide
+        static const uint16_t err_steps[4] = {
+            0, CONFIG_UPC_STEP_BATCH_ERR, CONFIG_UPC_STEP_BATCH_ERR / 2,
+            CONFIG_UPC_STEP_BATCH_ERR / 3 };
+        uint32_t m = err_steps[interval & 3];
         if (steps > m)
             steps = m;
     }

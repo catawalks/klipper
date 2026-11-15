@@ -37,7 +37,7 @@ void upc_outputs_off(void);
 
 // timer.c
 void timer_boot(void);
-uint8_t timer_pending(void);
+uint8_t timer_pending(uint32_t *now);
 void timer_clear_pending(void);
 void timer_set(uint32_t next);
 
