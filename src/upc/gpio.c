@@ -55,6 +55,7 @@ pwm_config_bits(uint8_t block)
     case 6:  return 0x5a;   // clutch: FM microcode writes 0x5a off / 0x5e on
     case 7:  return 0x18;
     case 8:  return 0x2a;   // solenoid: FM microcode writes 0x2a off / 0x2e on
+    case 10: return 0x18;   // beeper: stock pwm_4729.c, timebase 1 (bits 4-7)
     case 0x1b: case 0x1c: case 0x1d: case 0x1e: case 0x1f:
         return 0x0a;        // A4982 REF current
     default: return 0x28;   // fans, heaters (stock IO init: 0x20 | 0x08)
@@ -98,6 +99,9 @@ pwm_default_period(uint8_t block)
         return 1000;                // nozzle / bed heater
     if (block >= 0x1b && block <= 0x1f)
         return 200;                 // A4982 REF current
+    if (block == 10)
+        return 250;                 // beeper: stock 250 ticks of timebase 1
+                                    // (1 us in its setTune(): 4 kHz)
     return 100;
 }
 
