@@ -100,8 +100,10 @@ pwm_default_period(uint8_t block)
     if (block >= 0x1b && block <= 0x1f)
         return 200;                 // A4982 REF current
     if (block == 10)
-        return 250;                 // beeper: stock 250 ticks of timebase 1
-                                    // (1 us in its setTune(): 4 kHz)
+        return 1250;                // beeper: 4 kHz, the stock pitch (heard
+                                    // and measured 11-18: timebase 1 ticks
+                                    // at 5 MHz here; stock's 250 assumed
+                                    // 1 MHz and only ticks at 20 kHz)
     return 100;
 }
 
