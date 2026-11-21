@@ -133,6 +133,18 @@
 #define ADC_CFG1_VAL        0x00244d01u   // io_28fc(0,0x24,0x4d,1)
 #define ADC_MUX_WORD(sel)   (0x00010100u | (sel))
 
+// ---------------------------------------------------------------------
+// 88PA6270 (3DWOX 1X, 2X) SoC GPIO block: eight banks of 32 lines.
+// Linux GPIO number = bank * 32 + bit. Verified on a 1X against the
+// kernel's own view of each line (2026-11-21).
+// ---------------------------------------------------------------------
+#define GPIOBLK_BASE        0xd4019000u
+#define GPIOBLK_BANK(n)     (GPIOBLK_BASE + 0x100u * (n))
+#define GPIOBLK_LEVEL       0x00  // pin levels (read)
+#define GPIOBLK_SET         0x08  // write 1 bits: outputs high
+#define GPIOBLK_CLEAR       0x0c  // write 1 bits: outputs low
+#define GPIOBLK_BANKS       8
+
 #define DEC_SENSOR_BASE     0xf9301000u   // 2 encoder channels
 #define DEC_CONFIG_BASE     0xf9300000u
 

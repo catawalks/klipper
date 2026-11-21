@@ -12,12 +12,15 @@
 //   120..127 adc0..adc7         dec_adc mux select (0 nozzle, 1 bed)
 //   128..159 dsens0..dsens31    dec_sensor +0x210 status bits (dsens8 = LV
 //                               bed-levelling sensor)
+//   256..511 gpio0..gpio255     SoC GPIO block inputs (CONFIG_UPC_GPIO_BLOCK,
+//                               88PA6270 boards: 3DWOX 1X, 2X)
 enum {
     PIN_XENA_BASE = 0, PIN_XENA_COUNT = 64,
     PIN_PWM_BASE = 64, PIN_PWM_FIRST = 65, PIN_PWM_COUNT = 32,
     PIN_STEP_BASE = 100, PIN_DIR_BASE = 105, PIN_EN_BASE = 110,
     PIN_ADC_BASE = 120, PIN_ADC_COUNT = 8,
     PIN_DSENS_BASE = 128, PIN_DSENS_COUNT = 32,
+    PIN_GPIOBLK_BASE = 256, PIN_GPIOBLK_COUNT = 256,
 };
 
 struct gpio_out {
@@ -42,9 +45,9 @@ uint32_t gpio_step_burst_stop(struct gpio_out g, uint32_t c0);
 void gpio_out_write(struct gpio_out g, uint8_t val);
 
 struct gpio_in {
-    uint8_t pin;
+    uint16_t pin;
 };
-struct gpio_in gpio_in_setup(uint8_t pin, int8_t pull_up);
+struct gpio_in gpio_in_setup(uint32_t pin, int8_t pull_up);
 void gpio_in_reset(struct gpio_in g, int8_t pull_up);
 uint8_t gpio_in_read(struct gpio_in g);
 

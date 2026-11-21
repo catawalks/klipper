@@ -28,6 +28,9 @@ DECL_ENUMERATION_RANGE("pin", "smot_dir0", PIN_DIR_BASE, SMOT_COUNT);
 DECL_ENUMERATION_RANGE("pin", "smot_en0", PIN_EN_BASE, SMOT_COUNT);
 DECL_ENUMERATION_RANGE("pin", "adc0", PIN_ADC_BASE, PIN_ADC_COUNT);
 DECL_ENUMERATION_RANGE("pin", "dsens0", PIN_DSENS_BASE, PIN_DSENS_COUNT);
+#if CONFIG_UPC_GPIO_BLOCK
+DECL_ENUMERATION_RANGE("pin", "gpio0", PIN_GPIOBLK_BASE, PIN_GPIOBLK_COUNT);
+#endif
 
 static uint8_t step_level[SMOT_COUNT], step_idle[SMOT_COUNT];
 static uint8_t dir_level[SMOT_COUNT], en_level[SMOT_COUNT];
@@ -481,8 +484,14 @@ dsens_init(void)
 }
 
 struct gpio_in
-gpio_in_setup(uint8_t pin, int8_t pull_up)
+gpio_in_setup(uint32_t pin, int8_t pull_up)
 {
+    if (CONFIG_UPC_GPIO_BLOCK && pin >= PIN_GPIOBLK_BASE
+        && pin < PIN_GPIOBLK_BASE + PIN_GPIOBLK_COUNT)
+        // Read only: direction and pad setup stay as the board has them
+        return (struct gpio_in){ .pin = pin };
+    if (pin >= PIN_DSENS_BASE + PIN_DSENS_COUNT)
+        shutdown("Not an input pin");
     if (pin_in(pin, PIN_DSENS_BASE, PIN_DSENS_COUNT))
         dsens_init();
     else if (!pin_in(pin, PIN_XENA_BASE, PIN_XENA_COUNT))
@@ -500,7 +509,10 @@ uint8_t
 gpio_in_read(struct gpio_in g)
 {
     uint32_t v;
-    if (g.pin >= PIN_DSENS_BASE)
+    if (CONFIG_UPC_GPIO_BLOCK && g.pin >= PIN_GPIOBLK_BASE)
+        v = reg_read(GPIOBLK_BANK((g.pin - PIN_GPIOBLK_BASE) >> 5)
+                     + GPIOBLK_LEVEL);
+    else if (g.pin >= PIN_DSENS_BASE)
         v = reg_read(DEC_SENSOR_BASE + 0x210);
     else
         v = reg_read(g.pin < 32 ? XENA_XIRD : XENA_XIRD1);

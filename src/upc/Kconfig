@@ -110,6 +110,15 @@ config UPC_STEP_ARM
       fewer instructions, at the cost of a larger image (see the size
       check on klipper.bin against UPC_ITCM_SIZE).
 
+config UPC_GPIO_BLOCK
+    bool "Digital inputs on the SoC GPIO block (88PA6270: 3DWOX 1X, 2X)"
+    default n
+    help
+      On the 88PA6270 boards the XENA input registers read zero; the
+      sensors are on the SoC GPIO block at 0xd4019000 instead. This
+      adds input pins gpio0..gpio255 (the Linux GPIO numbers: bank * 32
+      + bit). They are only read, never configured.
+
 config UPC_ADC_SETTLE_US
     int "Wait after selecting an ADC input before reading (microseconds)"
     depends on UPC_CORE_IO
