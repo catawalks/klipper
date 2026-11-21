@@ -53,7 +53,7 @@ adc_select(uint8_t sel)
 }
 
 struct gpio_adc
-gpio_adc_setup(uint8_t pin)
+gpio_adc_setup(uint32_t pin)
 {
     if (pin < PIN_ADC_BASE || pin >= PIN_ADC_BASE + PIN_ADC_COUNT)
         shutdown("Not a valid ADC pin");

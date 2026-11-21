@@ -38,7 +38,7 @@ static uint8_t pwm_level[PIN_PWM_COUNT + 1];
 static uint32_t pwm_owned, smot_owned;
 
 static int
-pin_in(uint8_t pin, uint8_t base, uint8_t count)
+pin_in(uint32_t pin, uint32_t base, uint32_t count)
 {
     return pin >= base && pin < base + count;
 }
@@ -51,9 +51,29 @@ pin_in(uint8_t pin, uint8_t base, uint8_t count)
 // Per-block configuration bits (everything except RUN and LEVEL), as left
 // by the stock firmware (dumped from the printer with devmem after a stock
 // boot). Without the stock app nobody else sets them.
+// 88PA6270 boards (3DWOX 1X, 2X): the same dec_pwm hardware with another
+// block assignment (read from a stock 1X with devmem, 2026-11-21).
+static int
+pwm_x1_is_ref(uint8_t block)
+{
+    switch (block) {
+    case 8: case 13: case 18: case 21: case 23: case 24: case 26:
+    case 29: case 30: case 31: case 32:
+        return 1;           // TMC2224 current reference (period 200)
+    }
+    return 0;
+}
+
 static uint32_t
 pwm_config_bits(uint8_t block)
 {
+    if (CONFIG_UPC_GPIO_BLOCK) {
+        if (block == 7)
+            return 0x68;    // case lights: static level
+        if (block == 19)
+            return 0x18;    // beeper
+        return pwm_x1_is_ref(block) ? 0x0a : 0x28;
+    }
     switch (block) {
     case 6:  return 0x5a;   // clutch: FM microcode writes 0x5a off / 0x5e on
     case 7:  return 0x18;
@@ -96,6 +116,13 @@ DECL_CONSTANT("PWM_MAX", 255);
 static uint16_t
 pwm_default_period(uint8_t block)
 {
+    if (CONFIG_UPC_GPIO_BLOCK) {
+        if (block == 5 || block == 25 || block == 28)
+            return 1000;            // heaters
+        if (block == 19)
+            return 250;             // beeper: 4 kHz (timebase 1 is 1 MHz here)
+        return pwm_x1_is_ref(block) ? 200 : 100;
+    }
     if (block >= 1 && block <= 4)
         return 100;                 // fans
     if (block == 5 || block == 0x18)
@@ -111,7 +138,7 @@ pwm_default_period(uint8_t block)
 }
 
 struct gpio_pwm
-gpio_pwm_setup(uint8_t pin, uint32_t cycle_time, uint32_t val)
+gpio_pwm_setup(uint32_t pin, uint32_t cycle_time, uint32_t val)
 {
     if (!pin_in(pin, PIN_PWM_FIRST, PIN_PWM_COUNT))
         shutdown("Not a valid PWM pin");
@@ -369,11 +396,32 @@ smot_set_disable(uint8_t n, uint8_t val)
  * Digital outputs
  ****************************************************************/
 
+// SoC GPIO block outputs (88PA6270 boards). Only the level is written:
+// the line must already be an output (the stock firmware set it up).
+static void
+gpioblk_write(uint32_t pin, uint8_t val)
+{
+    uint32_t n = pin - PIN_GPIOBLK_BASE;
+    reg_write(GPIOBLK_BANK(n >> 5) + (val ? GPIOBLK_SET : GPIOBLK_CLEAR)
+              , 1u << (n & 31));
+}
+
+static uint8_t
+gpioblk_level(uint32_t pin)
+{
+    uint32_t n = pin - PIN_GPIOBLK_BASE;
+    return (reg_read(GPIOBLK_BANK(n >> 5) + GPIOBLK_LEVEL) >> (n & 31)) & 1;
+}
+
 struct gpio_out
-gpio_out_setup(uint8_t pin, uint8_t val)
+gpio_out_setup(uint32_t pin, uint8_t val)
 {
     struct gpio_out g = { .pin = pin };
-    if (pin_in(pin, PIN_PWM_FIRST, PIN_PWM_COUNT)) {
+    if (pin >= PIN_GPIOBLK_BASE) {
+        if (!CONFIG_UPC_GPIO_BLOCK
+            || pin >= PIN_GPIOBLK_BASE + PIN_GPIOBLK_COUNT)
+            shutdown("Not an output pin");
+    } else if (pin_in(pin, PIN_PWM_FIRST, PIN_PWM_COUNT)) {
         pwm_claim(pin - PIN_PWM_BASE);
     } else if (pin_in(pin, PIN_STEP_BASE, SMOT_COUNT)) {
         uint8_t n = pin - PIN_STEP_BASE;
@@ -405,8 +453,10 @@ gpio_out_reset(struct gpio_out g, uint8_t val)
 void
 gpio_out_write(struct gpio_out g, uint8_t val)
 {
-    uint8_t pin = g.pin;
-    if (pin_in(pin, PIN_PWM_FIRST, PIN_PWM_COUNT)) {
+    uint32_t pin = g.pin;
+    if (CONFIG_UPC_GPIO_BLOCK && pin >= PIN_GPIOBLK_BASE) {
+        gpioblk_write(pin, val);
+    } else if (pin_in(pin, PIN_PWM_FIRST, PIN_PWM_COUNT)) {
         pwm_static(pin - PIN_PWM_BASE, val);
     } else if (pin_in(pin, PIN_STEP_BASE, SMOT_COUNT)) {
         uint8_t n = pin - PIN_STEP_BASE;
@@ -426,8 +476,10 @@ gpio_out_write(struct gpio_out g, uint8_t val)
 void
 gpio_out_toggle_noirq(struct gpio_out g)
 {
-    uint8_t pin = g.pin;
-    if (pin_in(pin, PIN_STEP_BASE, SMOT_COUNT)) {
+    uint32_t pin = g.pin;
+    if (CONFIG_UPC_GPIO_BLOCK && pin >= PIN_GPIOBLK_BASE) {
+        gpioblk_write(pin, !gpioblk_level(pin));
+    } else if (pin_in(pin, PIN_STEP_BASE, SMOT_COUNT)) {
         uint8_t n = pin - PIN_STEP_BASE;
         uint8_t val = step_level[n] ^ 1;
         step_level[n] = val;

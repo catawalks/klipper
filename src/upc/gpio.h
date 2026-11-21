@@ -2,6 +2,7 @@
 #define __UPC_GPIO_H
 
 #include <stdint.h> // uint8_t
+#include "autoconf.h" // CONFIG_UPC_GPIO_BLOCK
 
 // Pin numbering (names are declared in gpio.c):
 //   0..63    xena0..xena63      XENA input pins (endstops, sensors)
@@ -12,8 +13,9 @@
 //   120..127 adc0..adc7         dec_adc mux select (0 nozzle, 1 bed)
 //   128..159 dsens0..dsens31    dec_sensor +0x210 status bits (dsens8 = LV
 //                               bed-levelling sensor)
-//   256..511 gpio0..gpio255     SoC GPIO block inputs (CONFIG_UPC_GPIO_BLOCK,
-//                               88PA6270 boards: 3DWOX 1X, 2X)
+//   256..511 gpio0..gpio255     SoC GPIO block lines (CONFIG_UPC_GPIO_BLOCK,
+//                               88PA6270 boards: 3DWOX 1X, 2X); outputs
+//                               only where the board already has them so
 enum {
     PIN_XENA_BASE = 0, PIN_XENA_COUNT = 64,
     PIN_PWM_BASE = 64, PIN_PWM_FIRST = 65, PIN_PWM_COUNT = 32,
@@ -24,9 +26,13 @@ enum {
 };
 
 struct gpio_out {
+#if CONFIG_UPC_GPIO_BLOCK
+    uint16_t pin;
+#else
     uint8_t pin;
+#endif
 };
-struct gpio_out gpio_out_setup(uint8_t pin, uint8_t val);
+struct gpio_out gpio_out_setup(uint32_t pin, uint8_t val);
 void gpio_out_reset(struct gpio_out g, uint8_t val);
 void gpio_out_toggle_noirq(struct gpio_out g);
 void gpio_out_toggle(struct gpio_out g);
@@ -55,13 +61,13 @@ struct gpio_pwm {
     uint8_t block;
     uint16_t period;
 };
-struct gpio_pwm gpio_pwm_setup(uint8_t pin, uint32_t cycle_time, uint32_t val);
+struct gpio_pwm gpio_pwm_setup(uint32_t pin, uint32_t cycle_time, uint32_t val);
 void gpio_pwm_write(struct gpio_pwm g, uint32_t val);
 
 struct gpio_adc {
     uint8_t sel;
 };
-struct gpio_adc gpio_adc_setup(uint8_t pin);
+struct gpio_adc gpio_adc_setup(uint32_t pin);
 uint32_t gpio_adc_sample(struct gpio_adc g);
 uint16_t gpio_adc_read(struct gpio_adc g);
 void gpio_adc_cancel_sample(struct gpio_adc g);
