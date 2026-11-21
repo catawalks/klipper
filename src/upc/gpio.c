@@ -190,7 +190,11 @@ smot_claim(uint8_t n)
     reg_write(b + SMOT_SETUP10, 8);
     reg_write(b + SMOT_SETUP14, 4);
     reg_write(b + SMOT_PATTERN, 0xaaaaaaaau);
-    reg_write(b + SMOT_CFG, reg_read(b + SMOT_CFG) | 0x10);
+    if (CONFIG_UPC_GPIO_BLOCK)
+        // 88PA6270 boards: bit 0 must be clear (see smot_set_disable)
+        reg_write(b + SMOT_CFG, (reg_read(b + SMOT_CFG) | 0x10) & ~1u);
+    else
+        reg_write(b + SMOT_CFG, reg_read(b + SMOT_CFG) | 0x10);
     reg_write(b + SMOT_ABORT, SMOT_DONE_BIT);
     reg_write(b + SMOT_CLEAR, SMOT_DONE_BIT);
     reg_write(b + SMOT_ENABLE, 1);
@@ -387,6 +391,13 @@ static void
 smot_set_disable(uint8_t n, uint8_t val)
 {
     en_level[n] = !!val;
+    // On the 88PA6270 boards (3DWOX 1X) the drivers are enabled by GPIO
+    // lines, and this bit does something else: with it set the engine's
+    // direction pin stayed high whatever the control register said (seen
+    // 2026-11-21 after a firmware restart had set it: every move went the
+    // same way). Never set it there.
+    if (CONFIG_UPC_GPIO_BLOCK)
+        return;
     uint32_t a = SMOT_BASE(n) + SMOT_CFG, c = reg_read(a);
     reg_write(a, val ? c | 1 : c & ~1u);
 }
