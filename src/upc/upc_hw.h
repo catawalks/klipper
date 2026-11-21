@@ -76,6 +76,24 @@
 #define SMOT_CFG            0x0c  // bit0 = 1: driver disabled; stock sets bit4
 #define SMOT_SETUP10        0x10  // stock 8 (power-on 1), meaning unknown
 #define SMOT_SETUP14        0x14  // stock 4 (power-on 0), meaning unknown
+#if defined(CONFIG_UPC_GPIO_BLOCK) && CONFIG_UPC_GPIO_BLOCK
+// 88PA6270 (3DWOX 1X, 2X): the block has four more table words and six
+// more sequence words in front, so the pattern moves by 0x10 and
+// everything from the control register on by 0x28. Read from the stock
+// 1X FM microcode's set-up and move code, and seen live (control, status
+// and edge counter) while the stock firmware jogged, 2026-11-21.
+#define SMOT_PATTERN        0x3c
+#define SMOT_CTRL           0x6c
+#define SMOT_ENABLE         0x78
+#define SMOT_RAMP_LEN       0x7c
+#define SMOT_PERIOD         0x80
+#define SMOT_CMD            0x84
+#define SMOT_START          0x88
+#define SMOT_STATUS         0x8c
+#define SMOT_EDGES          0xa0
+#define SMOT_DONE           0xb0
+#define SMOT_CLEAR          0xb4
+#else
 #define SMOT_PATTERN        0x2c  // stock 0xaaaaaaaa (power-on 0)
 #define SMOT_CTRL           0x44  // stock value 0x33224, bit4 = direction
 #define SMOT_ENABLE         0x50  // stock writes 1 before each move
@@ -87,6 +105,7 @@
 #define SMOT_EDGES          0x78  // COM_STP: output edges, 24-bit down-counter
 #define SMOT_DONE           0x88  // bit8 = move finished
 #define SMOT_CLEAR          0x8c  // write 0x100 to clear done
+#endif
 #define SMOT_CTRL_STOCK     0x33224u
 #define SMOT_CTRL_DIR       0x10u
 #define SMOT_MODE_CONST     0x1u
