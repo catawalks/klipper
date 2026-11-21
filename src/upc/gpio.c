@@ -174,6 +174,24 @@ gpio_pwm_write(struct gpio_pwm g, uint32_t val)
  * Stepper engines
  ****************************************************************/
 
+// Control (OUT_MODE) value for an engine and direction. On the 88PA6270
+// boards the stock firmware uses another value for the extruder engine
+// (3) and for the cartridge feed engine (4), whose direction changes two
+// bits (recorded on a stock 1X while it fed and retracted, 2026-11-21).
+// With the axis value on engine 3 the extruder's driver counted steps
+// but the motor did not turn.
+static uint32_t
+smot_ctrl_value(uint8_t n, uint8_t dir)
+{
+    if (CONFIG_UPC_GPIO_BLOCK) {
+        if (n == 3)
+            return dir ? 0x33034 : 0x33024;
+        if (n == 4)
+            return dir ? 0x30334 : 0x30224;
+    }
+    return SMOT_CTRL_STOCK | (dir ? SMOT_CTRL_DIR : 0);
+}
+
 static void
 smot_claim(uint8_t n)
 {
@@ -199,8 +217,7 @@ smot_claim(uint8_t n)
     reg_write(b + SMOT_CLEAR, SMOT_DONE_BIT);
     reg_write(b + SMOT_ENABLE, 1);
     reg_write(b + SMOT_PERIOD, CONFIG_UPC_STEP_HALF_TICKS);
-    reg_write(b + SMOT_CTRL
-              , SMOT_CTRL_STOCK | (dir_level[n] ? SMOT_CTRL_DIR : 0));
+    reg_write(b + SMOT_CTRL, smot_ctrl_value(n, dir_level[n]));
 }
 
 // A pulse requested while the engine still reports busy (+0x64 bit 8)
@@ -384,7 +401,7 @@ smot_set_dir(uint8_t n, uint8_t val)
     if (smot_wait_idle(b))
         smot_dir_waits[n]++;
     dir_level[n] = !!val;
-    reg_write(b + SMOT_CTRL, SMOT_CTRL_STOCK | (val ? SMOT_CTRL_DIR : 0));
+    reg_write(b + SMOT_CTRL, smot_ctrl_value(n, val));
 }
 
 static void
