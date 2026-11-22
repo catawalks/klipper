@@ -10,11 +10,18 @@
 #            "extruder" and/or the NAME of an [extruder_stepper NAME]
 #
 # FEED_UNTIL SENSOR=NAME DISTANCE=<mm> [STATE=1] [STEPPERS=a,b] [SPEED=]
-#            [ACCEL=] [REQUIRE=1]
+#            [ACCEL=] [REQUIRE=1] [FORBID=1]
+#            [ENCODER=NAME] [JAM_AFTER=<mm>] [JAM_UNTIL=<mm>]
 #   Moves the listed steppers together by up to DISTANCE (negative pulls
 #   back) and stops them in the micro-controller the moment the sensor
 #   reads STATE (1 = filament there, 0 = gone). With REQUIRE=1 it is an
-#   error if the sensor has not changed by the end of the move. The
+#   error if the sensor has not changed by the end of the move; with
+#   FORBID=1 it is an error if it has (a plain feed that must not lose
+#   the filament). ENCODER names a [feed_encoder]: if it shows no
+#   filament movement for its jam_distance the move is stopped with an
+#   error. JAM_AFTER and JAM_UNTIL limit that watch to a part of the
+#   move (mm from its start), for a pick-up the filament only reaches
+#   later or leaves before the end. The
 #   steppers are taken off their extruder for the move and put back
 #   afterwards. The sensor pin may also be used by a
 #   [filament_switch_sensor] (write it with the same "!" there).
@@ -44,6 +51,8 @@ class FeedUntil:
         self.commanded_pos = 0.
         self.last_distance = 0.
         self.last_stopped = False
+        self.last_jam = False
+        self.jam_watch = None
         self.motion_queuing = self.printer.load_object(config, 'motion_queuing')
         self.trapq = self.motion_queuing.allocate_trapq()
         self.trapq_append = self.motion_queuing.lookup_trapq_append()
@@ -72,7 +81,8 @@ class FeedUntil:
             self.mcu_endstop.add_stepper(es.stepper)
     def get_status(self, eventtime):
         return {'last_distance': self.last_distance,
-                'last_stopped': self.last_stopped}
+                'last_stopped': self.last_stopped,
+                'last_jam': self.last_jam}
     def _query(self):
         toolhead = self.printer.lookup_object('toolhead')
         print_time = toolhead.get_last_move_time()
@@ -84,6 +94,15 @@ class FeedUntil:
         speed = gcmd.get_float('SPEED', self.velocity, above=0.)
         accel = gcmd.get_float('ACCEL', self.accel, minval=0.)
         require = gcmd.get_int('REQUIRE', 0)
+        forbid = gcmd.get_int('FORBID', 0)
+        encoder = None
+        ename = gcmd.get('ENCODER', None)
+        if ename:
+            encoder = self.printer.lookup_object('feed_encoder ' + ename, None)
+            if encoder is None:
+                raise gcmd.error("Unknown feed_encoder '%s'" % (ename,))
+        jam_after = gcmd.get_float('JAM_AFTER', 0., minval=0.)
+        jam_until = gcmd.get_float('JAM_UNTIL', 9999999., above=0.)
         names = [n.strip() for n in
                  gcmd.get('STEPPERS', ','.join(self.stepper_names)).split(',')
                  if n.strip()]
@@ -101,6 +120,7 @@ class FeedUntil:
         toolhead.wait_moves()
         self.last_distance = 0.
         self.last_stopped = False
+        self.last_jam = False
         if not dist or self._query() == want:
             self.last_stopped = self._query() == want
             gcmd.respond_info("feed_until %s: sensor already %s, no move"
@@ -128,6 +148,9 @@ class FeedUntil:
         stepper_enable.set_motors_enable([s.get_name() for s in self.active],
                                          True)
         self.homing_accel = accel
+        self.jam_watch = None
+        if encoder is not None:
+            self.jam_watch = (encoder, speed, jam_after, jam_until)
         phoming = self.printer.lookup_object('homing')
         try:
             phoming.manual_home(self, [(self.mcu_endstop, self.name)],
@@ -154,7 +177,14 @@ class FeedUntil:
                     es.stepper.set_trapq(None)
             self.motion_queuing.check_step_generation_scan_windows()
             self.active = []
+            self.jam_watch = None
             self.sync_print_time()
+        if self.last_jam:
+            gcmd.respond_info("feed_until %s: moved %.1f mm, then no filament"
+                              " movement at encoder %s"
+                              % (self.name, self.last_distance, ename))
+            raise gcmd.error("Filament not moving (encoder %s): possible jam"
+                             % (ename,))
         self.last_stopped = self._query() == want
         gcmd.respond_info("feed_until %s: moved %.1f mm, sensor %s"
                           % (self.name, self.last_distance,
@@ -162,6 +192,9 @@ class FeedUntil:
         if require and not self.last_stopped:
             raise gcmd.error("FEED_UNTIL %s: the sensor did not change within"
                              " %.0f mm" % (self.name, abs(dist)))
+        if forbid and self.last_stopped:
+            raise gcmd.error("FEED_UNTIL %s: the sensor changed after %.0f mm"
+                             % (self.name, abs(self.last_distance)))
     # Toolhead wrappers to support homing (as in manual_stepper.py)
     def sync_print_time(self):
         toolhead = self.printer.lookup_object('toolhead')
@@ -197,9 +230,40 @@ class FeedUntil:
                           0., cruise_v, self.homing_accel)
         self.commanded_pos = newpos[0]
         end_time = start_time + accel_t + cruise_t + accel_t
-        self.motion_queuing.drip_update_time(start_time, end_time,
-                                             drip_completion)
+        if self.jam_watch is None:
+            self.motion_queuing.drip_update_time(start_time, end_time,
+                                                 drip_completion)
+        else:
+            # Stop feeding steps on the sensor or on a jam, whichever
+            # comes first
+            reactor = self.printer.get_reactor()
+            either = reactor.completion()
+            timer = reactor.register_timer(
+                (lambda eventtime: self._jam_check(eventtime, start_time,
+                                                   drip_completion, either)),
+                reactor.NOW)
+            try:
+                self.motion_queuing.drip_update_time(start_time, end_time,
+                                                     either)
+            finally:
+                reactor.unregister_timer(timer)
         self.motion_queuing.wipe_trapq(self.trapq)
+    def _jam_check(self, eventtime, start_time, drip_completion, either):
+        if drip_completion.test():
+            either.complete(drip_completion.result)
+            return self.printer.get_reactor().NEVER
+        encoder, speed, jam_after, jam_until = self.jam_watch
+        mcu = self.mcu_endstop.get_mcu()
+        now = mcu.estimated_print_time(eventtime)
+        fed = (now - start_time) * speed
+        if fed > jam_after and fed < jam_until:
+            since = max(mcu.estimated_print_time(encoder.last_eventtime),
+                        start_time + jam_after / speed)
+            if (now - since) * speed > encoder.jam_distance:
+                self.last_jam = True
+                either.complete(1)
+                return self.printer.get_reactor().NEVER
+        return eventtime + 0.020
     def get_kinematics(self):
         return self
     def get_steppers(self):
