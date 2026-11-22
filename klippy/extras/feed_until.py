@@ -10,7 +10,7 @@
 #            "extruder" and/or the NAME of an [extruder_stepper NAME]
 #
 # FEED_UNTIL SENSOR=NAME DISTANCE=<mm> [STATE=1] [STEPPERS=a,b] [SPEED=]
-#            [ACCEL=] [REQUIRE=1] [FORBID=1]
+#            [ACCEL=] [REQUIRE=1] [FORBID=1] [COLD=1]
 #            [ENCODER=NAME] [JAM_AFTER=<mm>] [JAM_UNTIL=<mm>]
 #   Moves the listed steppers together by up to DISTANCE (negative pulls
 #   back) and stops them in the micro-controller the moment the sensor
@@ -21,7 +21,9 @@
 #   filament movement for its jam_distance the move is stopped with an
 #   error. JAM_AFTER and JAM_UNTIL limit that watch to a part of the
 #   move (mm from its start), for a pick-up the filament only reaches
-#   later or leaves before the end. The
+#   later or leaves before the end. COLD=1 lets the extruder turn below
+#   its minimum extrude temperature: only for a stretch that ends well
+#   short of the hot end (feeding ahead while the nozzle heats). The
 #   steppers are taken off their extruder for the move and put back
 #   afterwards. The sensor pin may also be used by a
 #   [filament_switch_sensor] (write it with the same "!" there).
@@ -95,6 +97,7 @@ class FeedUntil:
         accel = gcmd.get_float('ACCEL', self.accel, minval=0.)
         require = gcmd.get_int('REQUIRE', 0)
         forbid = gcmd.get_int('FORBID', 0)
+        cold = gcmd.get_int('COLD', 0)
         encoder = None
         ename = gcmd.get('ENCODER', None)
         if ename:
@@ -110,7 +113,7 @@ class FeedUntil:
             if name not in self.esteppers:
                 raise gcmd.error("'%s' is not in the steppers of feed_until %s"
                                  % (name, self.name))
-            if not name.startswith('extruder'):
+            if cold or not name.startswith('extruder'):
                 continue
             heater = self.printer.lookup_object(name).get_heater()
             if not heater.can_extrude:
