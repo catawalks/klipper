@@ -109,7 +109,8 @@ class FeedUntil:
         esteppers = [self.esteppers[n] for n in names]
         toolhead.flush_step_generation()
         self.active = [es.stepper for es in esteppers]
-        saved = [(es, es.motion_queue) for es in esteppers]
+        saved = [(n, self.esteppers[n], self.esteppers[n].motion_queue)
+                 for n in names]
         start = [(s, s.get_mcu_position()) for s in self.active]
         self.commanded_pos = 0.
         # The move runs on a plain one-axis kinematics (as a manual
@@ -140,9 +141,15 @@ class FeedUntil:
             for s, old_sk in old_sks:
                 s.set_trapq(None)
                 s.set_stepper_kinematics(old_sk)
-            for es, queue in saved:
+            for name, es, queue in saved:
                 if queue:
                     es.sync_to_extruder(queue)
+                elif name.startswith('extruder'):
+                    # An extruder's own stepper sits on its queue without
+                    # a motion_queue name: put it back by hand
+                    extruder = self.printer.lookup_object(name)
+                    es.stepper.set_position([extruder.last_position, 0., 0.])
+                    es.stepper.set_trapq(extruder.get_trapq())
                 else:
                     es.stepper.set_trapq(None)
             self.motion_queuing.check_step_generation_scan_windows()
