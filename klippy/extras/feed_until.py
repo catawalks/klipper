@@ -19,6 +19,7 @@
 #   afterwards. The sensor pin may also be used by a
 #   [filament_switch_sensor] (write it with the same "!" there).
 import logging
+import chelper
 from . import force_move
 
 class FeedUntil:
@@ -111,7 +112,14 @@ class FeedUntil:
         saved = [(es, es.motion_queue) for es in esteppers]
         start = [(s, s.get_mcu_position()) for s in self.active]
         self.commanded_pos = 0.
+        # The move runs on a plain one-axis kinematics (as a manual
+        # stepper); the extruder kinematics come back afterwards.
+        ffi_main, ffi_lib = chelper.get_ffi()
+        old_sks = []
         for s in self.active:
+            sk = ffi_main.gc(ffi_lib.cartesian_stepper_alloc(b'x'),
+                             ffi_lib.free)
+            old_sks.append((s, s.set_stepper_kinematics(sk)))
             s.set_trapq(self.trapq)
             s.set_position([0., 0., 0.])
         self.motion_queuing.check_step_generation_scan_windows()
@@ -128,9 +136,10 @@ class FeedUntil:
             toolhead.flush_step_generation()
             s, start_pos = start[0]
             moved = (s.get_mcu_position() - start_pos) * s.get_step_dist()
-            if s.get_dir_inverted()[0]:
-                moved = -moved
             self.last_distance = moved
+            for s, old_sk in old_sks:
+                s.set_trapq(None)
+                s.set_stepper_kinematics(old_sk)
             for es, queue in saved:
                 if queue:
                     es.sync_to_extruder(queue)
