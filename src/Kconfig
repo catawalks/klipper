@@ -27,7 +27,7 @@ choice
     config MACH_PRU
         bool "Beaglebone PRU"
     config MACH_UPC
-        bool "Marvell 88PA6170 UPC (Sindoh DP200)"
+        bool "Marvell 88PA6170 / 88PA6270 UPC cores (Sindoh 3DWOX: DP200, 1X, 2X)"
     config MACH_AR100
         bool "Allwinner A64 AR100"
     config MACH_LINUX

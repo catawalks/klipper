@@ -1,4 +1,4 @@
-# DP200 / UPC port diagnostics: report the step-engine counters of the FM
+# Sindoh 3DWOX UPC port diagnostics: report the step-engine counters of the FM
 # MCU (pulses issued, pulses requested while the engine was still busy,
 # direction changes that had to wait for a running pulse).
 #

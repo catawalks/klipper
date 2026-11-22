@@ -1,4 +1,4 @@
-# Additional build rules for the Marvell 88PA6170 UPC cores (Sindoh DP200)
+# Additional build rules for the Marvell UPC cores (Sindoh 3DWOX: DP200, 1X, 2X)
 
 CROSS_PREFIX=arm-none-eabi-
 

@@ -1,4 +1,4 @@
-// Sindoh DP200 / Marvell 88PA6170 "Gemstone" UPC hardware definitions.
+// Sindoh 3DWOX (DP200, 1X, 2X) / Marvell "Gemstone" UPC hardware definitions.
 //
 // Everything here was recovered from the stock firmware (upc.ko, the
 // fm/io UPC microcode and the main printer program). See
