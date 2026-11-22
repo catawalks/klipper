@@ -62,6 +62,7 @@ class FeedUntil:
             else:
                 es = self.printer.lookup_object('extruder_stepper ' + name,
                                                 None)
+                es = getattr(es, 'extruder_stepper', None)
             if es is None:
                 raise self.printer.config_error(
                     "feed_until %s: unknown extruder stepper '%s'"
