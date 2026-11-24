@@ -10,10 +10,12 @@ This fork carries the Klipper **code** for the DP200:
   `src/Kconfig`).
 
 The printer **configuration** (`printer.cfg`, `dp200_printer.cfg`,
-`dp200_macros.cfg`) is not kept here. Its one home is the port project:
-https://github.com/catawalks/sindoh, folder `klipper_port/klipper/config/`.
+`dp200_macros.cfg`, the model files, and the other models' folders) is
+not kept here. Its one home is the port project:
+https://github.com/catawalks/sindoh-klipper, folder `klipper/config/`.
 That project also holds the installer, the host-side bridge (upctool) and
-the documentation.
+the documentation; the research notes are in
+https://github.com/catawalks/sindoh.
 
 ## Branches
 
