@@ -424,14 +424,25 @@ smot_set_disable(uint8_t n, uint8_t val)
  * Digital outputs
  ****************************************************************/
 
-// SoC GPIO block outputs (88PA6270 boards). Only the level is written:
-// the line must already be an output (the stock firmware set it up).
+// SoC GPIO block outputs (88PA6270 boards). The set, clear and
+// direction registers take a bit mask, so no read-modify-write is
+// needed and both cores can use them.
 static void
 gpioblk_write(uint32_t pin, uint8_t val)
 {
     uint32_t n = pin - PIN_GPIOBLK_BASE;
     reg_write(GPIOBLK_BANK(n >> 5) + (val ? GPIOBLK_SET : GPIOBLK_CLEAR)
               , 1u << (n & 31));
+}
+
+// Make a line an output. After power-on every line is an input; the
+// stock firmware makes its outputs outputs when its motion program
+// starts, which may not have run.
+static void
+gpioblk_output(uint32_t pin)
+{
+    uint32_t n = pin - PIN_GPIOBLK_BASE;
+    reg_write(GPIOBLK_BANK(n >> 5) + GPIOBLK_DIR_OUT, 1u << (n & 31));
 }
 
 static uint8_t
@@ -449,6 +460,10 @@ gpio_out_setup(uint32_t pin, uint8_t val)
         if (!CONFIG_UPC_GPIO_BLOCK
             || pin >= PIN_GPIOBLK_BASE + PIN_GPIOBLK_COUNT)
             shutdown("Not an output pin");
+        // Level first, so the line does not drive the wrong level
+        gpioblk_write(pin, val);
+        gpioblk_output(pin);
+        return g;
     } else if (pin_in(pin, PIN_PWM_FIRST, PIN_PWM_COUNT)) {
         pwm_claim(pin - PIN_PWM_BASE);
     } else if (pin_in(pin, PIN_STEP_BASE, SMOT_COUNT)) {

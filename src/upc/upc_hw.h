@@ -162,6 +162,7 @@
 #define GPIOBLK_LEVEL       0x00  // pin levels (read)
 #define GPIOBLK_SET         0x08  // write 1 bits: outputs high
 #define GPIOBLK_CLEAR       0x0c  // write 1 bits: outputs low
+#define GPIOBLK_DIR_OUT     0x1c  // write 1 bits: lines become outputs
 #define GPIOBLK_BANKS       8
 
 #define DEC_SENSOR_BASE     0xf9301000u   // 2 encoder channels
